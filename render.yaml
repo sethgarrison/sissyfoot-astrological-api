@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: natal-chart-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
