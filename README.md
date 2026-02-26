@@ -2,7 +2,7 @@
 
 A REST API for generating natal (birth) charts, powered by the **Swiss Ephemeris** via [Kerykeion](https://github.com/g-battaglia/kerykeion).
 
-Returns planetary positions, house cusps, aspects, lunar phase, and the big three (sun/moon/rising) for any birth date, time, and location.
+Returns planetary positions, house cusps, aspects, lunar phase, the big three (sun/moon/rising), and **interpretations** stored in the database (planet-in-sign, planet-in-house, aspect type, chart shape, and hemisphere/quadrant emphasis).
 
 ## Endpoints
 
@@ -63,12 +63,32 @@ If you want to use `city`+`nation` instead of raw coordinates, create a free acc
 export GEONAMES_USERNAME=your_username
 ```
 
+### Interpretations database
+
+The chart response includes an `interpretations` object with planet-in-sign, planet-in-house, aspect, chart shape, and distribution text loaded from the database.
+
+- **Local:** Without `DATABASE_URL`, the app uses SQLite (`natal_chart.db`) in the project directory. Run once to seed placeholder data:
+
+  ```bash
+  python -m database.seed
+  ```
+
+- **Render:** The blueprint creates a PostgreSQL database and links it. Placeholder data is seeded on first deploy.
+
+You can edit interpretations directly in the database. Keys: `planet_sign_interpretations`, `planet_house_interpretations`, `aspect_interpretations`, `chart_shape_interpretations`, `chart_distribution_interpretations`.
+
 ## Deploy to Render (free)
 
 1. Push this repo to GitHub
 2. Go to https://render.com and create a new **Web Service**
 3. Connect your GitHub repo
 4. Render will auto-detect the `Dockerfile` — no config needed
-5. (Optional) Add `GEONAMES_USERNAME` as an environment variable if you want city lookup
+5. **City geocoding setup** (required for `city`+`nation` lookups):
+   - Create a free account at https://www.geonames.org/login
+   - Confirm your email
+   - Enable web services at https://www.geonames.org/manageaccount
+   - In Render → your service → **Environment** → add: `GEONAMES_USERNAME` = your username
 
 The included `render.yaml` also supports Render Blueprints for one-click deploy.
+
+> **Note:** Without `GEONAMES_USERNAME`, use `lat`+`lng`+`tz_str` instead of `city`+`nation`.

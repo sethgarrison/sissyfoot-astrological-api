@@ -1,12 +1,24 @@
 import os
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from kerykeion import AstrologicalSubject
 from kerykeion.aspects import AspectsFactory
 from typing import Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession
+from database.connection import get_db, init_db
+from interpretations.chart_shapes import detect_chart_shape, detect_distributions
+from interpretations.lookup import fetch_interpretations
+
+
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Natal Chart API",
     description="Generate natal (birth) charts powered by the Swiss Ephemeris via Kerykeion.",
     version="1.0.0",
@@ -71,6 +83,19 @@ class LunarPhase(BaseModel):
     emoji: str
 
 
+class ChartShapeInfo(BaseModel):
+    primary: Optional[str] = None
+    interpretation: Optional[str] = None
+    distribution: dict[str, str] = {}
+
+
+class ChartInterpretations(BaseModel):
+    planet_in_sign: dict[str, str] = {}
+    planet_in_house: dict[str, str] = {}
+    aspects: dict[str, str] = {}
+    chart_shape: ChartShapeInfo = ChartShapeInfo()
+
+
 class NatalChart(BaseModel):
     name: Optional[str] = None
     birth_datetime: str
@@ -83,6 +108,7 @@ class NatalChart(BaseModel):
     planets: list[PlanetPosition]
     houses: list[HouseCusp]
     aspects: list[AspectInfo]
+    interpretations: ChartInterpretations = ChartInterpretations()
 
 
 def _sign(abbr: str) -> str:
@@ -180,11 +206,49 @@ def build_chart(
         planets=planets,
         houses=houses,
         aspects=aspects,
+        interpretations=ChartInterpretations(),
     )
 
 
+async def _enrich_with_interpretations(
+    chart: NatalChart, session: AsyncSession
+) -> NatalChart:
+    """Fetch interpretations from DB and attach to chart."""
+    planet_sign_pairs = [(p.name, p.sign) for p in chart.planets]
+    planet_house_pairs = [(p.name, p.house) for p in chart.planets]
+    aspect_keys = [f"{a.planet1} {a.aspect} {a.planet2}" for a in chart.aspects]
+    planet_dicts = [
+        {"name": p.name, "abs_degree": p.abs_degree, "house": p.house}
+        for p in chart.planets
+    ]
+    chart_shape = detect_chart_shape(planet_dicts)
+    distribution_keys = detect_distributions(planet_dicts)
+    try:
+        interp = await fetch_interpretations(
+            session,
+            planet_sign_pairs=planet_sign_pairs,
+            planet_house_pairs=planet_house_pairs,
+            aspect_keys=aspect_keys,
+            chart_shape=chart_shape,
+            distribution_keys=distribution_keys,
+        )
+        chart.interpretations = ChartInterpretations(
+            planet_in_sign=interp["planet_in_sign"],
+            planet_in_house=interp["planet_in_house"],
+            aspects=interp["aspects"],
+            chart_shape=ChartShapeInfo(
+                primary=interp["chart_shape"]["primary"],
+                interpretation=interp["chart_shape"]["interpretation"],
+                distribution=interp["chart_shape"]["distribution"],
+            ),
+        )
+    except Exception:
+        pass  # Keep empty interpretations on DB error
+    return chart
+
+
 @app.get("/chart", response_model=NatalChart, summary="Generate a natal chart")
-def get_chart(
+async def get_chart(
     year: int = Query(..., examples=[1990], description="Birth year"),
     month: int = Query(..., ge=1, le=12, examples=[6], description="Birth month"),
     day: int = Query(..., ge=1, le=31, examples=[15], description="Birth day"),
@@ -196,10 +260,12 @@ def get_chart(
     lng: Optional[float] = Query(None, examples=[-74.006], description="Longitude (skip geocoding)"),
     tz_str: Optional[str] = Query(None, examples=["America/New_York"], description="IANA timezone (required with lat/lng)"),
     name: Optional[str] = Query(None, description="Optional name for the subject"),
+    session: AsyncSession = Depends(get_db),
 ):
     """
     Generate a natal chart. Provide either `city`+`nation` for automatic geocoding
     (requires GEONAMES_USERNAME env var) or `lat`+`lng`+`tz_str` for direct coordinates.
+    Interpretations are loaded from the database when available.
     """
     if not (lat and lng and tz_str) and not city:
         raise HTTPException(
@@ -207,11 +273,12 @@ def get_chart(
             detail="Provide either city+nation or lat+lng+tz_str.",
         )
     try:
-        return build_chart(
+        chart = build_chart(
             year, month, day, hour, minute,
             city=city, nation=nation, lat=lat, lng=lng, tz_str=tz_str,
             name=name or "",
         )
+        return await _enrich_with_interpretations(chart, session)
     except Exception as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -231,7 +298,10 @@ class ChartRequest(BaseModel):
 
 
 @app.post("/chart", response_model=NatalChart, summary="Generate a natal chart (POST)")
-def create_chart(req: ChartRequest):
+async def create_chart(
+    req: ChartRequest,
+    session: AsyncSession = Depends(get_db),
+):
     """Generate a natal chart via POST body."""
     if not (req.lat and req.lng and req.tz_str) and not req.city:
         raise HTTPException(
@@ -239,12 +309,13 @@ def create_chart(req: ChartRequest):
             detail="Provide either city+nation or lat+lng+tz_str.",
         )
     try:
-        return build_chart(
+        chart = build_chart(
             req.year, req.month, req.day, req.hour, req.minute,
             city=req.city, nation=req.nation,
             lat=req.lat, lng=req.lng, tz_str=req.tz_str,
             name=req.name or "",
         )
+        return await _enrich_with_interpretations(chart, session)
     except Exception as e:
         raise HTTPException(status_code=422, detail=str(e))
 
