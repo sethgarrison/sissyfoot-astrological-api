@@ -27,7 +27,7 @@ You can provide location two ways:
 | year     | yes      | Birth year                              |
 | month    | yes      | Birth month (1-12)                      |
 | day      | yes      | Birth day (1-31)                        |
-| hour     | no       | Birth hour, 24h format (default: 12)    |
+| hour     |``` no       | Birth hour, 24h format (default: 12)    |
 | minute   | no       | Birth minute (default: 0)               |
 | lat      | *        | Latitude                                |
 | lng      | *        | Longitude                               |
@@ -81,13 +81,15 @@ export GEONAMES_USERNAME=your_username
 
 The chart response includes an `interpretations` object with planet-in-sign, planet-in-house, aspect, chart shape, and distribution text loaded from the database.
 
-- **Local:** Without `DATABASE_URL`, the app uses SQLite (`natal_chart.db`) in the project directory. Run once to seed placeholder data:
+- **Local:** Without `DATABASE_URL`, the app uses SQLite (`natal_chart.db`) in the project directory.
+
+- **Seeding:** Run explicitly when needed (e.g., after a fresh deploy or model change):
 
   ```bash
   python -m database.seed
   ```
 
-- **Render:** The blueprint creates a PostgreSQL database and links it. Placeholder data is seeded on first deploy.
+  On Render, use the **Shell** tab for your service (or a one-off job) to run this against the Postgres database.
 
 You can edit interpretations directly in the database. Keys: `planet_sign_interpretations`, `planet_house_interpretations`, `aspect_interpretations`, `chart_shape_interpretations`, `chart_distribution_interpretations`.
 
