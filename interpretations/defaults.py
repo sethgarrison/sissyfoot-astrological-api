@@ -1,8 +1,9 @@
 """
-Built-in generic interpretations for Sun, Moon, and Rising signs.
+Built-in generic interpretations for Sun, Moon, Rising, planets in houses, and aspects.
 Used when the database has no interpretations (e.g., before seeding).
 DB interpretations take precedence when present.
 """
+# --- Signs (Sun, Moon, Rising) ---
 SIGNS = [
     "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
     "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces",
@@ -63,4 +64,85 @@ def get_default_planet_in_sign(sun_sign: str, moon_sign: str, rising_sign: str) 
         result[f"Moon in {moon_sign}"] = MOON_IN_SIGN[f"Moon in {moon_sign}"]
     if rising_sign and f"Rising in {rising_sign}" in RISING_IN_SIGN:
         result[f"Rising in {rising_sign}"] = RISING_IN_SIGN[f"Rising in {rising_sign}"]
+    return result
+
+
+# --- Planets in Houses ---
+# Generic interpretations: planet energy expressed through the house's life area.
+# Key format: "Planet in House N"
+def _planet_in_house_defaults() -> dict[str, str]:
+    d: dict[str, str] = {}
+    planets = [
+        ("Sun", "identity, vitality, self-expression"),
+        ("Moon", "emotions, instincts, nurturing"),
+        ("Mercury", "thinking, communication, learning"),
+        ("Venus", "love, beauty, values"),
+        ("Mars", "action, drive, assertion"),
+        ("Jupiter", "expansion, faith, opportunity"),
+        ("Saturn", "structure, responsibility, discipline"),
+        ("Uranus", "innovation, rebellion, awakening"),
+        ("Neptune", "imagination, spirituality, dissolution"),
+        ("Pluto", "transformation, power, depth"),
+        ("Chiron", "wounding, healing, teaching"),
+    ]
+    houses = [
+        (1, "self, identity, and physical presence"),
+        (2, "resources, values, and possessions"),
+        (3, "communication, siblings, and local environment"),
+        (4, "home, family, and inner foundation"),
+        (5, "creativity, romance, and self-expression"),
+        (6, "health, service, and daily routines"),
+        (7, "partnership, marriage, and open relationships"),
+        (8, "shared resources, transformation, and the unseen"),
+        (9, "philosophy, travel, and higher meaning"),
+        (10, "career, reputation, and public role"),
+        (11, "friends, hopes, and group belonging"),
+        (12, "subconscious, solitude, and release"),
+    ]
+    for pname, ptheme in planets:
+        for hnum, htheme in houses:
+            d[f"{pname} in House {hnum}"] = (
+                f"{ptheme.capitalize()} expressed through {htheme}."
+            )
+    return d
+
+
+PLANET_IN_HOUSE = _planet_in_house_defaults()
+
+
+# --- Aspects (generic by type) ---
+ASPECT_DEFAULTS = {
+    "Conjunction": "Planets merge their energies; themes reinforce and blend. Intensity depends on the planets involved.",
+    "Opposition": "Dynamic tension between two poles. Integration or awareness of both sides brings growth.",
+    "Square": "Friction and challenge that can drive action. Often requires effort to harness constructively.",
+    "Trine": "Ease and flow between energies. Natural talent or harmony in the areas involved.",
+    "Sextile": "Cooperative, supportive connection. Opportunities that arise with modest effort.",
+    "Quincunx": "Subtle friction requiring adjustment. Themes that don't align easily but can integrate with awareness.",
+}
+
+
+def get_default_planet_in_house(planet_house_pairs: list[tuple[str, int]]) -> dict[str, str]:
+    """Return built-in interpretations for each planet-house pair present in the chart."""
+    result = {}
+    for pname, hnum in planet_house_pairs:
+        key = f"{pname} in House {hnum}"
+        if key in PLANET_IN_HOUSE:
+            result[key] = PLANET_IN_HOUSE[key]
+    return result
+
+
+def get_default_aspects(aspect_keys: list[str]) -> dict[str, str]:
+    """Return built-in interpretations for aspects. Keys like 'Sun square Moon' map to generic aspect-type text."""
+    result = {}
+    aspect_by_name = {a.lower(): a for a in ASPECT_DEFAULTS}
+    for key in aspect_keys:
+        if key in result:
+            continue
+        # Key format: "planet1 aspect_type planet2" (e.g. "Sun square Moon")
+        parts = key.split()
+        if len(parts) >= 3:
+            aspect_name = parts[1]
+            if aspect_name.lower() in aspect_by_name:
+                canonical = aspect_by_name[aspect_name.lower()]
+                result[key] = ASPECT_DEFAULTS[canonical]
     return result

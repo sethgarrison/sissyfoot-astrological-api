@@ -12,7 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.connection import get_db, init_db
 from database.models import Reading
 from interpretations.chart_shapes import detect_chart_shape, detect_distributions
-from interpretations.defaults import get_default_planet_in_sign
+from interpretations.defaults import (
+    get_default_planet_in_sign,
+    get_default_planet_in_house,
+    get_default_aspects,
+)
 from interpretations.lookup import fetch_interpretations
 
 
@@ -296,10 +300,21 @@ async def _enrich_with_interpretations(
         if key not in planet_in_sign:
             planet_in_sign[key] = text
 
+    # Merge built-in defaults for planet-in-house and aspects
+    planet_in_house = dict(interp.get("planet_in_house", {}))
+    for key, text in get_default_planet_in_house(planet_house_pairs).items():
+        if key not in planet_in_house:
+            planet_in_house[key] = text
+
+    aspects = dict(interp.get("aspects", {}))
+    for key, text in get_default_aspects(aspect_keys).items():
+        if key not in aspects:
+            aspects[key] = text
+
     chart.interpretations = ChartInterpretations(
         planet_in_sign=planet_in_sign,
-        planet_in_house=interp.get("planet_in_house", {}),
-        aspects=interp.get("aspects", {}),
+        planet_in_house=planet_in_house,
+        aspects=aspects,
         chart_shape=ChartShapeInfo(
             primary=interp.get("chart_shape", {}).get("primary"),
             interpretation=interp.get("chart_shape", {}).get("interpretation"),
