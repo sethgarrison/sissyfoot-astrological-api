@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.connection import get_db, init_db
 from database.models import Reading
 from interpretations.chart_shapes import detect_chart_shape, detect_distributions
+from interpretations.defaults import get_default_planet_in_sign
 from interpretations.lookup import fetch_interpretations
 
 
@@ -279,18 +280,32 @@ async def _enrich_with_interpretations(
             chart_shape=chart_shape,
             distribution_keys=distribution_keys,
         )
-        chart.interpretations = ChartInterpretations(
-            planet_in_sign=interp["planet_in_sign"],
-            planet_in_house=interp["planet_in_house"],
-            aspects=interp["aspects"],
-            chart_shape=ChartShapeInfo(
-                primary=interp["chart_shape"]["primary"],
-                interpretation=interp["chart_shape"]["interpretation"],
-                distribution=interp["chart_shape"]["distribution"],
-            ),
-        )
+        planet_in_sign = dict(interp["planet_in_sign"])
     except Exception:
-        pass  # Keep empty interpretations on DB error
+        planet_in_sign = {}
+        interp = {
+            "planet_in_house": {},
+            "aspects": {},
+            "chart_shape": {"primary": chart_shape, "interpretation": None, "distribution": {}},
+        }
+
+    # Merge built-in defaults for Sun, Moon, Rising (always include when missing)
+    for key, text in get_default_planet_in_sign(
+        chart.sun_sign, chart.moon_sign, chart.rising_sign
+    ).items():
+        if key not in planet_in_sign:
+            planet_in_sign[key] = text
+
+    chart.interpretations = ChartInterpretations(
+        planet_in_sign=planet_in_sign,
+        planet_in_house=interp.get("planet_in_house", {}),
+        aspects=interp.get("aspects", {}),
+        chart_shape=ChartShapeInfo(
+            primary=interp.get("chart_shape", {}).get("primary"),
+            interpretation=interp.get("chart_shape", {}).get("interpretation"),
+            distribution=interp.get("chart_shape", {}).get("distribution", {}),
+        ),
+    )
     return chart
 
 
