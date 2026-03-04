@@ -135,8 +135,14 @@ def _house_num(house_str: str) -> int:
 
 
 def _planet(body) -> PlanetPosition:
+    raw_name = body.name.replace("_", " ")
+    # Normalize lunar node names for display
+    if "True North Lunar Node" in raw_name or raw_name == "North Node":
+        raw_name = "North Node"
+    elif "True South Lunar Node" in raw_name or raw_name == "South Node":
+        raw_name = "South Node"
     return PlanetPosition(
-        name=body.name.replace("_", " "),
+        name=raw_name,
         sign=_sign(body.sign),
         sign_num=body.sign_num,
         degree=round(body.position, 4),
@@ -170,6 +176,7 @@ def build_chart(
         subject.mars, subject.jupiter, subject.saturn, subject.uranus,
         subject.neptune, subject.pluto, subject.chiron,
     ]
+    # North and South Lunar Nodes
     for node_attr in ("true_north_lunar_node", "true_south_lunar_node"):
         node = getattr(subject, node_attr, None)
         if node is not None:
