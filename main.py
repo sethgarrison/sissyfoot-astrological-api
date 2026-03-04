@@ -1,13 +1,16 @@
 import os
-from fastapi import FastAPI, HTTPException, Query, Depends
+import re
+from fastapi import FastAPI, HTTPException, Query, Depends, Path
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from kerykeion import AstrologicalSubject
 from kerykeion.aspects import AspectsFactory
 from typing import Optional
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from database.connection import get_db, init_db
+from database.models import Reading
 from interpretations.chart_shapes import detect_chart_shape, detect_distributions
 from interpretations.lookup import fetch_interpretations
 
@@ -109,6 +112,18 @@ class NatalChart(BaseModel):
     houses: list[HouseCusp]
     aspects: list[AspectInfo]
     interpretations: ChartInterpretations = ChartInterpretations()
+    reading_id: Optional[str] = None  # Use this to fetch via GET /readings/{reading_id}
+
+
+# Delimiter for reading identifier (URL-safe, avoids conflict with negative numbers)
+READING_ID_DELIM = "__"
+
+
+def _make_reading_identifier(name: str, birth_datetime: str, lat: float, lng: float) -> str:
+    """Build identifier: name-birthdatetime-lat-long (using __ as delimiter for clarity)."""
+    safe_name = (name or "Subject").strip().replace(" ", "_")
+    safe_name = re.sub(r"[^\w\-]", "", safe_name) or "Subject"
+    return f"{safe_name}{READING_ID_DELIM}{birth_datetime}{READING_ID_DELIM}{lat}{READING_ID_DELIM}{lng}"
 
 
 def _sign(abbr: str) -> str:
@@ -247,6 +262,25 @@ async def _enrich_with_interpretations(
     return chart
 
 
+async def _save_reading(chart: NatalChart, session: AsyncSession) -> None:
+    """Save chart to readings table. Upserts by identifier."""
+    identifier = _make_reading_identifier(
+        chart.name or "Subject",
+        chart.birth_datetime,
+        chart.latitude,
+        chart.longitude,
+    )
+    chart_json = chart.model_dump_json()
+    existing = (
+        await session.execute(select(Reading).where(Reading.identifier == identifier))
+    ).scalar_one_or_none()
+    if existing:
+        existing.chart_data = chart_json
+    else:
+        session.add(Reading(identifier=identifier, chart_data=chart_json))
+    await session.flush()
+
+
 @app.get("/chart", response_model=NatalChart, summary="Generate a natal chart")
 async def get_chart(
     year: int = Query(..., examples=[1990], description="Birth year"),
@@ -278,7 +312,12 @@ async def get_chart(
             city=city, nation=nation, lat=lat, lng=lng, tz_str=tz_str,
             name=name or "",
         )
-        return await _enrich_with_interpretations(chart, session)
+        chart = await _enrich_with_interpretations(chart, session)
+        chart.reading_id = _make_reading_identifier(
+            chart.name or "Subject", chart.birth_datetime, chart.latitude, chart.longitude
+        )
+        await _save_reading(chart, session)
+        return chart
     except Exception as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -315,9 +354,55 @@ async def create_chart(
             lat=req.lat, lng=req.lng, tz_str=req.tz_str,
             name=req.name or "",
         )
-        return await _enrich_with_interpretations(chart, session)
+        chart = await _enrich_with_interpretations(chart, session)
+        chart.reading_id = _make_reading_identifier(
+            chart.name or "Subject", chart.birth_datetime, chart.latitude, chart.longitude
+        )
+        await _save_reading(chart, session)
+        return chart
     except Exception as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+
+class ReadingSummary(BaseModel):
+    identifier: str
+    name: Optional[str] = None
+    birth_datetime: str
+    created_at: Optional[str] = None
+
+
+@app.get("/readings", summary="List all saved readings")
+async def list_readings(session: AsyncSession = Depends(get_db)):
+    """Return all saved readings. Full chart data available at GET /readings/{identifier}."""
+    rows = (await session.execute(select(Reading).order_by(Reading.created_at.desc()))).scalars().all()
+    result = []
+    for r in rows:
+        chart = NatalChart.model_validate_json(r.chart_data)
+        result.append(
+            ReadingSummary(
+                identifier=r.identifier,
+                name=chart.name,
+                birth_datetime=chart.birth_datetime,
+                created_at=r.created_at.isoformat() if r.created_at else None,
+            )
+        )
+    return result
+
+
+@app.get("/readings/{identifier}", response_model=NatalChart, summary="Fetch a saved reading")
+async def get_reading(
+    identifier: str = Path(..., description="Reading ID: name__birthdatetime__lat__lng"),
+    session: AsyncSession = Depends(get_db),
+):
+    """Retrieve a previously saved natal chart reading by its identifier."""
+    row = (
+        await session.execute(select(Reading).where(Reading.identifier == identifier))
+    ).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Reading not found")
+    chart = NatalChart.model_validate_json(row.chart_data)
+    chart.reading_id = identifier
+    return chart
 
 
 @app.get("/health")

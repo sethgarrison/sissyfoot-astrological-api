@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Text, Float, ForeignKey
-from sqlalchemy.orm import DeclarativeBase, relationship
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, Text, Float, ForeignKey, DateTime
+from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):
@@ -80,3 +81,13 @@ class ChartDistributionInterpretation(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     distribution_key = Column(String(50), unique=True, nullable=False)
     interpretation_text = Column(Text, nullable=False)
+
+
+class Reading(Base):
+    """Stored natal chart reading, keyed by name-birthdatetime-lat-lng."""
+    __tablename__ = "readings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    identifier = Column(String(255), unique=True, nullable=False, index=True)
+    chart_data = Column(Text, nullable=False)  # JSON string for SQLite compatibility
+    created_at = Column(DateTime, default=datetime.utcnow)

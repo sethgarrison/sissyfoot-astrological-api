@@ -6,12 +6,14 @@ Returns planetary positions, house cusps, aspects, lunar phase, the big three (s
 
 ## Endpoints
 
-| Method | Path      | Description                |
-|--------|-----------|----------------------------|
-| GET    | `/chart`  | Generate a natal chart     |
-| POST   | `/chart`  | Generate a natal chart     |
-| GET    | `/health` | Health check               |
-| GET    | `/docs`   | Interactive Swagger UI     |
+| Method | Path               | Description                         |
+|--------|--------------------|-------------------------------------|
+| GET    | `/chart`           | Generate a natal chart (saves to DB)|
+| POST   | `/chart`           | Generate a natal chart (saves to DB)|
+| GET    | `/readings`        | List all saved readings              |
+| GET    | `/readings/{id}`   | Fetch a saved reading by identifier  |
+| GET    | `/health`          | Health check                        |
+| GET    | `/docs`            | Interactive Swagger UI              |
 
 ### Query parameters / body fields
 
@@ -42,6 +44,18 @@ curl "http://localhost:8000/chart?year=1990&month=6&day=15&hour=12&minute=0&lat=
 
 # Using city geocoding (needs GEONAMES_USERNAME)
 curl "http://localhost:8000/chart?year=1990&month=6&day=15&hour=12&city=New+York&nation=US"
+```
+
+### Saved readings
+
+Each chart is saved with identifier `name__birthdatetime__lat__lng`. The response includes `reading_id` — use it to fetch the reading later:
+
+```bash
+# Generate chart (returns reading_id in response)
+curl "http://localhost:8000/chart?year=1990&month=6&day=15&name=Jane&lat=40.7128&lng=-74.006&tz_str=America/New_York"
+
+# Fetch saved reading by identifier
+curl "http://localhost:8000/readings/Jane__1990-06-15T12:00__40.7128__-74.006"
 ```
 
 ## Run locally
