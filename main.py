@@ -71,6 +71,16 @@ class HouseCusp(BaseModel):
     abs_degree: float
 
 
+class LunarNodePosition(BaseModel):
+    """North or South Lunar Node — modeled separately from planets (no aspects, no chart shape)."""
+    node: str  # "North Node" | "South Node"
+    sign: str
+    sign_num: int
+    degree: float
+    abs_degree: float
+    house: int
+
+
 class AspectInfo(BaseModel):
     planet1: str
     planet2: str
@@ -109,6 +119,7 @@ class NatalChart(BaseModel):
     rising_sign: str
     lunar_phase: LunarPhase
     planets: list[PlanetPosition]
+    lunar_nodes: list[LunarNodePosition] = []  # North & South Node (excluded from aspects & chart shape)
     houses: list[HouseCusp]
     aspects: list[AspectInfo]
     interpretations: ChartInterpretations = ChartInterpretations()
@@ -135,14 +146,8 @@ def _house_num(house_str: str) -> int:
 
 
 def _planet(body) -> PlanetPosition:
-    raw_name = body.name.replace("_", " ")
-    # Normalize lunar node names for display
-    if "True North Lunar Node" in raw_name or raw_name == "North Node":
-        raw_name = "North Node"
-    elif "True South Lunar Node" in raw_name or raw_name == "South Node":
-        raw_name = "South Node"
     return PlanetPosition(
-        name=raw_name,
+        name=body.name.replace("_", " "),
         sign=_sign(body.sign),
         sign_num=body.sign_num,
         degree=round(body.position, 4),
@@ -151,6 +156,20 @@ def _planet(body) -> PlanetPosition:
         retrograde=body.retrograde or False,
         speed=round(body.speed, 6) if body.speed else None,
     )
+
+
+def _lunar_node(body, label: str) -> LunarNodePosition:
+    return LunarNodePosition(
+        node=label,
+        sign=_sign(body.sign),
+        sign_num=body.sign_num,
+        degree=round(body.position, 4),
+        abs_degree=round(body.abs_pos, 4),
+        house=_house_num(body.house),
+    )
+
+
+NODE_NAMES = {"True_North_Lunar_Node", "True_South_Lunar_Node", "North_Node", "South_Node"}  # Kerykeion aspect names
 
 
 def build_chart(
@@ -176,13 +195,15 @@ def build_chart(
         subject.mars, subject.jupiter, subject.saturn, subject.uranus,
         subject.neptune, subject.pluto, subject.chiron,
     ]
-    # North and South Lunar Nodes
-    for node_attr in ("true_north_lunar_node", "true_south_lunar_node"):
-        node = getattr(subject, node_attr, None)
-        if node is not None:
-            bodies.append(node)
-
     planets = [_planet(b) for b in bodies]
+
+    lunar_nodes = []
+    north = getattr(subject, "true_north_lunar_node", None)
+    south = getattr(subject, "true_south_lunar_node", None)
+    if north is not None:
+        lunar_nodes.append(_lunar_node(north, "North Node"))
+    if south is not None:
+        lunar_nodes.append(_lunar_node(south, "South Node"))
 
     houses = []
     for i, attr in enumerate(HOUSE_ATTRS, start=1):
@@ -198,6 +219,9 @@ def build_chart(
     try:
         asp_result = AspectsFactory.natal_aspects(subject._model)
         for a in asp_result.aspects:
+            # Exclude aspects involving lunar nodes (they're not planets)
+            if a.p1_name in NODE_NAMES or a.p2_name in NODE_NAMES:
+                continue
             aspects.append(AspectInfo(
                 planet1=a.p1_name.replace("_", " "),
                 planet2=a.p2_name.replace("_", " "),
@@ -226,6 +250,7 @@ def build_chart(
         rising_sign=_sign(subject.first_house.sign),
         lunar_phase=lunar_phase,
         planets=planets,
+        lunar_nodes=lunar_nodes,
         houses=houses,
         aspects=aspects,
         interpretations=ChartInterpretations(),
