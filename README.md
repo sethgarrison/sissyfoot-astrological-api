@@ -32,6 +32,7 @@ You can provide location two ways:
 | lat      | *        | Latitude                                |
 | lng      | *        | Longitude                               |
 | tz_str   | *        | IANA timezone (e.g. `America/New_York`) |
+| house_system | no    | `whole_sign` (default) or `placidus`    |
 | city     | *        | Birth city name                         |
 | nation   | *        | ISO 2-letter country code               |
 | name     | no       | Optional label for the subject          |

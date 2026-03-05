@@ -57,6 +57,10 @@ HOUSE_ATTRS = [
     "ninth_house", "tenth_house", "eleventh_house", "twelfth_house",
 ]
 
+# House system: API value -> Kerykeion identifier (P=Placidus, W=Whole Sign)
+HOUSE_SYSTEMS = {"whole_sign": "W", "placidus": "P", "WSH": "W"}
+DEFAULT_HOUSE_SYSTEM = "whole_sign"
+
 
 class PlanetPosition(BaseModel):
     name: str
@@ -119,6 +123,7 @@ class NatalChart(BaseModel):
     birth_datetime: str
     latitude: float
     longitude: float
+    house_system: str = "whole_sign"  # whole_sign (default) or placidus
     sun_sign: str
     moon_sign: str
     rising_sign: str
@@ -186,8 +191,12 @@ def build_chart(
     lng: Optional[float] = None,
     tz_str: Optional[str] = None,
     name: str = "",
+    house_system: str = DEFAULT_HOUSE_SYSTEM,
 ) -> NatalChart:
-    kwargs: dict = dict(online=False) if (lat and lng and tz_str) else {}
+    house_sys = HOUSE_SYSTEMS.get(house_system, HOUSE_SYSTEMS[DEFAULT_HOUSE_SYSTEM])
+    kwargs: dict = {"houses_system_identifier": house_sys}
+    if lat and lng and tz_str:
+        kwargs["online"] = False
     subject = AstrologicalSubject(
         name or "Subject", year, month, day, hour, minute,
         city=city, nation=nation, lat=lat, lng=lng, tz_str=tz_str,
@@ -250,6 +259,7 @@ def build_chart(
         birth_datetime=f"{year}-{month:02d}-{day:02d}T{hour:02d}:{minute:02d}",
         latitude=subject.lat,
         longitude=subject.lng,
+        house_system=house_system,
         sun_sign=_sign(subject.sun.sign),
         moon_sign=_sign(subject.moon.sign),
         rising_sign=_sign(subject.first_house.sign),
@@ -356,6 +366,11 @@ async def get_chart(
     lng: Optional[float] = Query(None, examples=[-74.006], description="Longitude (skip geocoding)"),
     tz_str: Optional[str] = Query(None, examples=["America/New_York"], description="IANA timezone (required with lat/lng)"),
     name: Optional[str] = Query(None, description="Optional name for the subject"),
+    house_system: str = Query(
+        DEFAULT_HOUSE_SYSTEM,
+        description="House system: whole_sign (default) or placidus",
+        examples=["whole_sign"],
+    ),
     session: AsyncSession = Depends(get_db),
 ):
     """
@@ -373,6 +388,7 @@ async def get_chart(
             year, month, day, hour, minute,
             city=city, nation=nation, lat=lat, lng=lng, tz_str=tz_str,
             name=name or "",
+            house_system=house_system,
         )
         chart = await _enrich_with_interpretations(chart, session)
         chart.reading_id = _make_reading_identifier(
@@ -396,6 +412,7 @@ class ChartRequest(BaseModel):
     lng: Optional[float] = Field(None, examples=[-74.006])
     tz_str: Optional[str] = Field(None, examples=["America/New_York"])
     name: Optional[str] = None
+    house_system: str = Field(DEFAULT_HOUSE_SYSTEM, description="whole_sign or placidus")
 
 
 @app.post("/chart", response_model=NatalChart, summary="Generate a natal chart (POST)")
@@ -415,6 +432,7 @@ async def create_chart(
             city=req.city, nation=req.nation,
             lat=req.lat, lng=req.lng, tz_str=req.tz_str,
             name=req.name or "",
+            house_system=req.house_system,
         )
         chart = await _enrich_with_interpretations(chart, session)
         chart.reading_id = _make_reading_identifier(
