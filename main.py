@@ -155,6 +155,29 @@ def _house_num(house_str: str) -> int:
     return HOUSE_NUM.get(house_str, 0)
 
 
+def _parse_time(time_str: Optional[str]) -> Optional[tuple[int, int]]:
+    """
+    Parse time string into (hour, minute). Accepts:
+    - "HH:MM" (e.g. "14:30")
+    - "HH:MM:SS" (e.g. "14:30:00")
+    - "H:MM" (e.g. "9:05")
+    Returns None if invalid or empty.
+    """
+    if not time_str or not time_str.strip():
+        return None
+    parts = time_str.strip().split(":")
+    if len(parts) < 2:
+        return None
+    try:
+        h = int(parts[0])
+        m = int(parts[1])
+        if 0 <= h <= 23 and 0 <= m <= 59:
+            return (h, m)
+    except ValueError:
+        pass
+    return None
+
+
 def _planet(body) -> PlanetPosition:
     return PlanetPosition(
         name=body.name.replace("_", " "),
@@ -360,6 +383,11 @@ async def get_chart(
     day: int = Query(..., ge=1, le=31, examples=[15], description="Birth day"),
     hour: int = Query(12, ge=0, le=23, description="Birth hour (24h format)"),
     minute: int = Query(0, ge=0, le=59, description="Birth minute"),
+    time: Optional[str] = Query(
+        None,
+        description="Alternative: birth time as HH:MM or HH:MM:SS (overrides hour and minute)",
+        examples=["14:30"],
+    ),
     city: Optional[str] = Query(None, examples=["New York"], description="Birth city (used for geocoding if lat/lng/tz_str not given)"),
     nation: Optional[str] = Query(None, examples=["US"], description="Birth nation ISO code (used with city)"),
     lat: Optional[float] = Query(None, examples=[40.7128], description="Latitude (skip geocoding)"),
@@ -383,6 +411,9 @@ async def get_chart(
             status_code=400,
             detail="Provide either city+nation or lat+lng+tz_str.",
         )
+    # time param overrides hour/minute when provided (e.g. "14:30")
+    if (parsed := _parse_time(time)):
+        hour, minute = parsed
     try:
         chart = build_chart(
             year, month, day, hour, minute,
@@ -406,6 +437,10 @@ class ChartRequest(BaseModel):
     day: int = Field(..., ge=1, le=31, examples=[15])
     hour: int = Field(12, ge=0, le=23)
     minute: int = Field(0, ge=0, le=59)
+    time: Optional[str] = Field(
+        None,
+        description="Alternative: birth time as HH:MM or HH:MM:SS (overrides hour and minute)",
+    )
     city: Optional[str] = Field(None, examples=["New York"])
     nation: Optional[str] = Field(None, examples=["US"])
     lat: Optional[float] = Field(None, examples=[40.7128])
@@ -427,8 +462,11 @@ async def create_chart(
             detail="Provide either city+nation or lat+lng+tz_str.",
         )
     try:
+        hour, minute = req.hour, req.minute
+        if (parsed := _parse_time(req.time)):
+            hour, minute = parsed
         chart = build_chart(
-            req.year, req.month, req.day, req.hour, req.minute,
+            req.year, req.month, req.day, hour, minute,
             city=req.city, nation=req.nation,
             lat=req.lat, lng=req.lng, tz_str=req.tz_str,
             name=req.name or "",

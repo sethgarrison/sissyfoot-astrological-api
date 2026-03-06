@@ -27,8 +27,9 @@ You can provide location two ways:
 | year     | yes      | Birth year                              |
 | month    | yes      | Birth month (1-12)                      |
 | day      | yes      | Birth day (1-31)                        |
-| hour     |``` no       | Birth hour, 24h format (default: 12)    |
+| hour     | no       | Birth hour, 24h format (default: 12)    |
 | minute   | no       | Birth minute (default: 0)               |
+| time     | no       | Alternative: `HH:MM` or `HH:MM:SS` (overrides hour & minute) |
 | lat      | *        | Latitude                                |
 | lng      | *        | Longitude                               |
 | tz_str   | *        | IANA timezone (e.g. `America/New_York`) |
@@ -41,7 +42,9 @@ You can provide location two ways:
 
 ```bash
 # Using direct coordinates (no API key needed)
-curl "http://localhost:8000/chart?year=1990&month=6&day=15&hour=12&minute=0&lat=40.7128&lng=-74.006&tz_str=America/New_York"
+curl "http://localhost:8000/chart?year=1990&month=6&day=15&hour=12&minute=30&lat=40.7128&lng=-74.006&tz_str=America/New_York"
+# Or use time=HH:MM
+curl "http://localhost:8000/chart?year=1990&month=6&day=15&time=12:30&lat=40.7128&lng=-74.006&tz_str=America/New_York"
 
 # Using city geocoding (needs GEONAMES_USERNAME)
 curl "http://localhost:8000/chart?year=1990&month=6&day=15&hour=12&city=New+York&nation=US"
