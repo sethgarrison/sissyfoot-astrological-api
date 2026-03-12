@@ -74,26 +74,34 @@ HOUSE_SYSTEMS = {"whole_sign": "W", "placidus": "P", "WSH": "W"}
 DEFAULT_HOUSE_SYSTEM = "whole_sign"
 
 
-def _compute_houses_overview(houses: list["HouseCusp"]) -> "HousesOverview":
-    """Compute sign distribution by house, quality, and element from house cusps."""
-    signs_by_house: dict[int, str] = {h.number: h.sign for h in houses}
-    by_quality: dict[str, list[str]] = {"cardinal": [], "fixed": [], "mutable": []}
-    by_element: dict[str, list[str]] = {"fire": [], "earth": [], "air": [], "water": []}
-    for sign in signs_by_house.values():
+def _compute_sign_placement_overview(planets: list["PlanetPosition"]) -> "SignPlacementOverview":
+    """Compute sign distribution from planetary placements: which signs have planets, by quality and element."""
+    signs_with_planets: dict[str, list[str]] = {}
+    by_quality: dict[str, list[str]] = {"cardinal": [], "fixed": [], "mutable": []}  # signs per quality
+    by_element: dict[str, list[str]] = {"fire": [], "earth": [], "air": [], "water": []}  # signs per element
+    quality_planets: dict[str, list[str]] = {"cardinal": [], "fixed": [], "mutable": []}
+    element_planets: dict[str, list[str]] = {"fire": [], "earth": [], "air": [], "water": []}
+    for p in planets:
+        sign = p.sign
+        signs_with_planets.setdefault(sign, []).append(p.name)
         q = SIGN_TO_QUALITY.get(sign)
         if q:
-            by_quality[q].append(sign)
+            if sign not in by_quality[q]:
+                by_quality[q].append(sign)
+            quality_planets[q].append(p.name)
         e = SIGN_TO_ELEMENT.get(sign)
         if e:
-            by_element[e].append(sign)
-    return HousesOverview(
-        signs_by_house=signs_by_house,
+            if sign not in by_element[e]:
+                by_element[e].append(sign)
+            element_planets[e].append(p.name)
+    return SignPlacementOverview(
+        signs_with_planets=signs_with_planets,
         by_quality={
-            k: QualityDistribution(count=len(v), signs=v)
+            k: QualityDistribution(count=len(quality_planets[k]), signs=v, planets=quality_planets[k])
             for k, v in by_quality.items()
         },
         by_element={
-            k: ElementDistribution(count=len(v), signs=v)
+            k: ElementDistribution(count=len(element_planets[k]), signs=v, planets=element_planets[k])
             for k, v in by_element.items()
         },
     )
@@ -149,20 +157,22 @@ class ChartShapeInfo(BaseModel):
 
 
 class QualityDistribution(BaseModel):
-    """Count and list of signs for a quality (cardinal, fixed, mutable)."""
+    """Count and list of signs/planets for a quality (cardinal, fixed, mutable)."""
     count: int
-    signs: list[str] = []
+    signs: list[str] = []  # signs with planets in this quality
+    planets: list[str] = []  # planet names in signs of this quality
 
 
 class ElementDistribution(BaseModel):
-    """Count and list of signs for an element (fire, earth, air, water)."""
+    """Count and list of signs/planets for an element (fire, earth, air, water)."""
     count: int
-    signs: list[str] = []
+    signs: list[str] = []  # signs with planets in this element
+    planets: list[str] = []  # planet names in signs of this element
 
 
-class HousesOverview(BaseModel):
-    """Overview of signs occupying houses, with distributions by quality and element."""
-    signs_by_house: dict[int, str] = {}  # house number -> sign
+class SignPlacementOverview(BaseModel):
+    """Overview of signs that have planets, with distributions by quality and element."""
+    signs_with_planets: dict[str, list[str]] = {}  # sign -> list of planet names
     by_quality: dict[str, QualityDistribution] = {}  # cardinal, fixed, mutable
     by_element: dict[str, ElementDistribution] = {}  # fire, earth, air, water
 
@@ -187,9 +197,9 @@ class NatalChart(BaseModel):
     planets: list[PlanetPosition]
     lunar_nodes: list[LunarNodePosition] = []  # North & South Node (excluded from aspects & chart shape)
     houses: list[HouseCusp]
-    houses_overview: HousesOverview = Field(
-        default_factory=lambda: HousesOverview(),
-        description="Overview of signs in houses, with distributions by quality and element",
+    houses_overview: SignPlacementOverview = Field(
+        default_factory=lambda: SignPlacementOverview(),
+        description="Overview of signs that have planets, with distributions by quality and element",
     )
     aspects: list[AspectInfo]
     interpretations: ChartInterpretations = ChartInterpretations()
@@ -350,7 +360,7 @@ def build_chart(
         planets=planets,
         lunar_nodes=lunar_nodes,
         houses=houses,
-        houses_overview=_compute_houses_overview(houses),
+        houses_overview=_compute_sign_placement_overview(planets),
         aspects=aspects,
         interpretations=ChartInterpretations(),
     )
