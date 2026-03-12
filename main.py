@@ -45,6 +45,18 @@ SIGN_FULL = {
     "Sag": "Sagittarius", "Cap": "Capricorn", "Aqu": "Aquarius", "Pis": "Pisces",
 }
 
+# Sign → element (fire, earth, air, water) and quality/modality (cardinal, fixed, mutable)
+SIGN_TO_ELEMENT = {
+    "Aries": "fire", "Taurus": "earth", "Gemini": "air", "Cancer": "water",
+    "Leo": "fire", "Virgo": "earth", "Libra": "air", "Scorpio": "water",
+    "Sagittarius": "fire", "Capricorn": "earth", "Aquarius": "air", "Pisces": "water",
+}
+SIGN_TO_QUALITY = {
+    "Aries": "cardinal", "Taurus": "fixed", "Gemini": "mutable", "Cancer": "cardinal",
+    "Leo": "fixed", "Virgo": "mutable", "Libra": "cardinal", "Scorpio": "fixed",
+    "Sagittarius": "mutable", "Capricorn": "cardinal", "Aquarius": "fixed", "Pisces": "mutable",
+}
+
 HOUSE_NUM = {
     "First_House": 1, "Second_House": 2, "Third_House": 3, "Fourth_House": 4,
     "Fifth_House": 5, "Sixth_House": 6, "Seventh_House": 7, "Eighth_House": 8,
@@ -60,6 +72,31 @@ HOUSE_ATTRS = [
 # House system: API value -> Kerykeion identifier (P=Placidus, W=Whole Sign)
 HOUSE_SYSTEMS = {"whole_sign": "W", "placidus": "P", "WSH": "W"}
 DEFAULT_HOUSE_SYSTEM = "whole_sign"
+
+
+def _compute_houses_overview(houses: list["HouseCusp"]) -> "HousesOverview":
+    """Compute sign distribution by house, quality, and element from house cusps."""
+    signs_by_house: dict[int, str] = {h.number: h.sign for h in houses}
+    by_quality: dict[str, list[str]] = {"cardinal": [], "fixed": [], "mutable": []}
+    by_element: dict[str, list[str]] = {"fire": [], "earth": [], "air": [], "water": []}
+    for sign in signs_by_house.values():
+        q = SIGN_TO_QUALITY.get(sign)
+        if q:
+            by_quality[q].append(sign)
+        e = SIGN_TO_ELEMENT.get(sign)
+        if e:
+            by_element[e].append(sign)
+    return HousesOverview(
+        signs_by_house=signs_by_house,
+        by_quality={
+            k: QualityDistribution(count=len(v), signs=v)
+            for k, v in by_quality.items()
+        },
+        by_element={
+            k: ElementDistribution(count=len(v), signs=v)
+            for k, v in by_element.items()
+        },
+    )
 
 
 class PlanetPosition(BaseModel):
@@ -111,6 +148,25 @@ class ChartShapeInfo(BaseModel):
     distribution: dict[str, str] = {}
 
 
+class QualityDistribution(BaseModel):
+    """Count and list of signs for a quality (cardinal, fixed, mutable)."""
+    count: int
+    signs: list[str] = []
+
+
+class ElementDistribution(BaseModel):
+    """Count and list of signs for an element (fire, earth, air, water)."""
+    count: int
+    signs: list[str] = []
+
+
+class HousesOverview(BaseModel):
+    """Overview of signs occupying houses, with distributions by quality and element."""
+    signs_by_house: dict[int, str] = {}  # house number -> sign
+    by_quality: dict[str, QualityDistribution] = {}  # cardinal, fixed, mutable
+    by_element: dict[str, ElementDistribution] = {}  # fire, earth, air, water
+
+
 class ChartInterpretations(BaseModel):
     planet_in_sign: dict[str, str] = {}
     planet_in_house: dict[str, str] = {}
@@ -131,6 +187,10 @@ class NatalChart(BaseModel):
     planets: list[PlanetPosition]
     lunar_nodes: list[LunarNodePosition] = []  # North & South Node (excluded from aspects & chart shape)
     houses: list[HouseCusp]
+    houses_overview: HousesOverview = Field(
+        default_factory=lambda: HousesOverview(),
+        description="Overview of signs in houses, with distributions by quality and element",
+    )
     aspects: list[AspectInfo]
     interpretations: ChartInterpretations = ChartInterpretations()
     reading_id: Optional[str] = None  # Use this to fetch via GET /readings/{reading_id}
@@ -290,6 +350,7 @@ def build_chart(
         planets=planets,
         lunar_nodes=lunar_nodes,
         houses=houses,
+        houses_overview=_compute_houses_overview(houses),
         aspects=aspects,
         interpretations=ChartInterpretations(),
     )
