@@ -13,6 +13,7 @@ from database.models import (
     AspectInterpretation,
     ChartShapeInterpretation,
     ChartDistributionInterpretation,
+    ModalityElementDistributionInterpretation,
 )
 
 
@@ -23,9 +24,12 @@ async def fetch_interpretations(
     aspect_keys: list[str],
     chart_shape: Optional[str],
     distribution_keys: list[str],
+    modality_element_keys: list[str] | None = None,
+    retrograde_planets: set[str] | None = None,
 ) -> dict:
     """
     Fetch all relevant interpretations. Returns a dict matching the API response shape.
+    When a planet is retrograde, fetches retrograde_interpretation from planet_sign and planet_house tables.
     """
     result = {
         "planet_in_sign": {},
@@ -36,9 +40,24 @@ async def fetch_interpretations(
             "interpretation": None,
             "distribution": {},
         },
+        "modality_element_distribution": {},
+        "retrograde_planets": [],
+        "retrograde_interpretations": {},
     }
 
-    if not planet_sign_pairs and not planet_house_pairs and not aspect_keys and not chart_shape and not distribution_keys:
+    retrograde_planets = retrograde_planets or set()
+    result["retrograde_planets"] = sorted(retrograde_planets)
+
+    empty = (
+        not planet_sign_pairs
+        and not planet_house_pairs
+        and not aspect_keys
+        and not chart_shape
+        and not distribution_keys
+        and not modality_element_keys
+        and not retrograde_planets
+    )
+    if empty:
         return result
 
     # Build lookup maps
@@ -52,6 +71,10 @@ async def fetch_interpretations(
     house_by_num = {h.number: h.id for h in house_rows}
     aspect_by_name = {a.name: a.id for a in aspect_rows}
 
+    retrograde = retrograde_planets or set()
+    if retrograde:
+        result["retrograde_planets"] = sorted(retrograde)
+
     # Planet-Sign
     for pname, sname in planet_sign_pairs:
         pid = planet_by_name.get(pname)
@@ -60,14 +83,19 @@ async def fetch_interpretations(
             continue
         key = f"{pname} in {sname}"
         r = await session.execute(
-            select(PlanetSignInterpretation.interpretation_text).where(
+            select(
+                PlanetSignInterpretation.interpretation_text,
+                PlanetSignInterpretation.retrograde_interpretation,
+            ).where(
                 PlanetSignInterpretation.planet_id == pid,
                 PlanetSignInterpretation.sign_id == sid,
             )
         )
-        text = r.scalar_one_or_none()
-        if text:
-            result["planet_in_sign"][key] = text
+        row = r.one_or_none()
+        if row:
+            result["planet_in_sign"][key] = row.interpretation_text
+            if pname in retrograde and row.retrograde_interpretation:
+                result["retrograde_interpretations"][key] = row.retrograde_interpretation
 
     # Planet-House
     for pname, hnum in planet_house_pairs:
@@ -77,14 +105,19 @@ async def fetch_interpretations(
             continue
         key = f"{pname} in House {hnum}"
         r = await session.execute(
-            select(PlanetHouseInterpretation.interpretation_text).where(
+            select(
+                PlanetHouseInterpretation.interpretation_text,
+                PlanetHouseInterpretation.retrograde_interpretation,
+            ).where(
                 PlanetHouseInterpretation.planet_id == pid,
                 PlanetHouseInterpretation.house_id == hid,
             )
         )
-        text = r.scalar_one_or_none()
-        if text:
-            result["planet_in_house"][key] = text
+        row = r.one_or_none()
+        if row:
+            result["planet_in_house"][key] = row.interpretation_text
+            if pname in retrograde and row.retrograde_interpretation:
+                result["retrograde_interpretations"][key] = row.retrograde_interpretation
 
     # Aspects - generic (aspect type only) for now
     for aspect_key in aspect_keys:
@@ -126,5 +159,16 @@ async def fetch_interpretations(
         text = r.scalar_one_or_none()
         if text:
             result["chart_shape"]["distribution"][dkey] = text
+
+    # Modality/element distribution (from planetary placements by sign)
+    for key in modality_element_keys or []:
+        r = await session.execute(
+            select(ModalityElementDistributionInterpretation.interpretation_text).where(
+                ModalityElementDistributionInterpretation.distribution_key == key
+            )
+        )
+        text = r.scalar_one_or_none()
+        if text:
+            result["modality_element_distribution"][key] = text
 
     return result

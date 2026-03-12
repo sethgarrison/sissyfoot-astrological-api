@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.connection import get_db, init_db
 from database.models import Reading
 from interpretations.chart_shapes import detect_chart_shape, detect_distributions
+from interpretations.modality_element import detect_modality_element_keys
 from interpretations.defaults import (
     get_default_planet_in_sign,
     get_default_planet_in_house,
@@ -182,6 +183,9 @@ class ChartInterpretations(BaseModel):
     planet_in_house: dict[str, str] = {}
     aspects: dict[str, str] = {}
     chart_shape: ChartShapeInfo = ChartShapeInfo()
+    modality_element_distribution: dict[str, str] = {}  # e.g. element_fire_dominant -> interpretation
+    retrograde_planets: list[str] = []  # planet names that are retrograde in this chart
+    retrograde_interpretations: dict[str, str] = {}  # e.g. "Mercury in Gemini" -> retrograde meaning
 
 
 class NatalChart(BaseModel):
@@ -379,6 +383,10 @@ async def _enrich_with_interpretations(
     ]
     chart_shape = detect_chart_shape(planet_dicts)
     distribution_keys = detect_distributions(planet_dicts)
+    by_quality = {k: v.count for k, v in chart.houses_overview.by_quality.items()}
+    by_element = {k: v.count for k, v in chart.houses_overview.by_element.items()}
+    modality_element_keys = detect_modality_element_keys(by_quality, by_element)
+    retrograde_planets = {p.name for p in chart.planets if p.retrograde}
     try:
         interp = await fetch_interpretations(
             session,
@@ -387,6 +395,8 @@ async def _enrich_with_interpretations(
             aspect_keys=aspect_keys,
             chart_shape=chart_shape,
             distribution_keys=distribution_keys,
+            modality_element_keys=modality_element_keys,
+            retrograde_planets=retrograde_planets,
         )
         planet_in_sign = dict(interp["planet_in_sign"])
     except Exception:
@@ -395,6 +405,9 @@ async def _enrich_with_interpretations(
             "planet_in_house": {},
             "aspects": {},
             "chart_shape": {"primary": chart_shape, "interpretation": None, "distribution": {}},
+            "modality_element_distribution": {},
+            "retrograde_planets": sorted(retrograde_planets),
+            "retrograde_interpretations": {},
         }
 
     # Merge built-in defaults for Sun, Moon, Rising (always include when missing)
@@ -424,6 +437,9 @@ async def _enrich_with_interpretations(
             interpretation=interp.get("chart_shape", {}).get("interpretation"),
             distribution=interp.get("chart_shape", {}).get("distribution", {}),
         ),
+        modality_element_distribution=interp.get("modality_element_distribution", {}),
+        retrograde_planets=interp.get("retrograde_planets", []),
+        retrograde_interpretations=interp.get("retrograde_interpretations", {}),
     )
     return chart
 

@@ -177,9 +177,9 @@ def detect_chart_shape(planets: list[dict]) -> Optional[str]:
 
 def detect_distributions(planets: list[dict]) -> list[str]:
     """
-    Detect hemisphere/quadrant emphases.
+    Detect hemisphere/quadrant emphases and spread patterns.
     planets: list of {"name": str, "house": int}
-    Returns list of distribution keys that apply (e.g. hemisphere_northern, quadrant_4).
+    Returns list of distribution keys that apply (e.g. hemisphere_northern, quadrant_4, hemisphere_spread).
     """
     houses = [p["house"] for p in planets if p.get("house") and 1 <= p["house"] <= 12]
     if not houses:
@@ -196,6 +196,25 @@ def detect_distributions(planets: list[dict]) -> list[str]:
         "quadrant_4": sum(1 for h in houses if h in QUADRANT_4),
     }
     total = len(houses)
-    # Consider it an "emphasis" if that region has more than half the planets
     threshold = total / 2
-    return [k for k, v in counts.items() if v > threshold]
+
+    keys: list[str] = []
+    # Emphasis: region has more than half the planets
+    for k, v in counts.items():
+        if v > threshold:
+            keys.append(k)
+
+    # Hemisphere spread: planets split across N/S or E/W with no majority in either
+    n, s = counts["hemisphere_northern"], counts["hemisphere_southern"]
+    e, w = counts["hemisphere_eastern"], counts["hemisphere_western"]
+    if n > 0 and s > 0 and n <= threshold and s <= threshold:
+        keys.append("hemisphere_spread_north_south")
+    if e > 0 and w > 0 and e <= threshold and w <= threshold:
+        keys.append("hemisphere_spread_east_west")
+
+    # Quarter/quadrant spread: no single quadrant has a majority
+    q_counts = [counts["quadrant_1"], counts["quadrant_2"], counts["quadrant_3"], counts["quadrant_4"]]
+    if max(q_counts) <= threshold and sum(1 for c in q_counts if c > 0) >= 2:
+        keys.append("quadrant_spread")
+
+    return keys

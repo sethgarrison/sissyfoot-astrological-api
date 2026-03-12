@@ -20,6 +20,7 @@ from database.models import (
     AspectInterpretation,
     ChartShapeInterpretation,
     ChartDistributionInterpretation,
+    ModalityElementDistributionInterpretation,
 )
 
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -62,9 +63,13 @@ async def export_all():
         path = OUTPUT_DIR / "planet_sign_interpretations.csv"
         with open(path, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
-            w.writerow(["id", "planet", "sign", "interpretation_text"])
+            w.writerow(["id", "planet", "sign", "interpretation_text", "retrograde_interpretation"])
             for r in rows:
-                w.writerow([r.PlanetSignInterpretation.id, r.planet, r.sign, r.PlanetSignInterpretation.interpretation_text])
+                w.writerow([
+                    r.PlanetSignInterpretation.id, r.planet, r.sign,
+                    r.PlanetSignInterpretation.interpretation_text,
+                    r.PlanetSignInterpretation.retrograde_interpretation or "",
+                ])
         print(f"Wrote {path} ({len(rows)} rows)")
 
         # Planet-House
@@ -83,9 +88,13 @@ async def export_all():
         path = OUTPUT_DIR / "planet_house_interpretations.csv"
         with open(path, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
-            w.writerow(["id", "planet", "house", "interpretation_text"])
+            w.writerow(["id", "planet", "house", "interpretation_text", "retrograde_interpretation"])
             for r in rows:
-                w.writerow([r.PlanetHouseInterpretation.id, r.planet, r.house, r.PlanetHouseInterpretation.interpretation_text])
+                w.writerow([
+                    r.PlanetHouseInterpretation.id, r.planet, r.house,
+                    r.PlanetHouseInterpretation.interpretation_text,
+                    r.PlanetHouseInterpretation.retrograde_interpretation or "",
+                ])
         print(f"Wrote {path} ({len(rows)} rows)")
 
         # Aspect
@@ -128,6 +137,22 @@ async def export_all():
             )
         ).scalars().all()
         path = OUTPUT_DIR / "chart_distribution_interpretations.csv"
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["id", "distribution_key", "interpretation_text"])
+            for r in rows:
+                w.writerow([r.id, r.distribution_key, r.interpretation_text])
+        print(f"Wrote {path} ({len(rows)} rows)")
+
+        # Modality/Element Distribution
+        rows = (
+            await session.execute(
+                select(ModalityElementDistributionInterpretation).order_by(
+                    ModalityElementDistributionInterpretation.distribution_key
+                )
+            )
+        ).scalars().all()
+        path = OUTPUT_DIR / "modality_element_distribution_interpretations.csv"
         with open(path, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             w.writerow(["id", "distribution_key", "interpretation_text"])

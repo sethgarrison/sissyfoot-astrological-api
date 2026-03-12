@@ -48,6 +48,7 @@ class PlanetSignInterpretation(Base):
     planet_id = Column(Integer, ForeignKey("planets.id"), nullable=False)
     sign_id = Column(Integer, ForeignKey("signs.id"), nullable=False)
     interpretation_text = Column(Text, nullable=False)
+    retrograde_interpretation = Column(Text, nullable=True)  # meaning when planet is retrograde in this sign
 
 
 class PlanetHouseInterpretation(Base):
@@ -57,6 +58,7 @@ class PlanetHouseInterpretation(Base):
     planet_id = Column(Integer, ForeignKey("planets.id"), nullable=False)
     house_id = Column(Integer, ForeignKey("houses.id"), nullable=False)
     interpretation_text = Column(Text, nullable=False)
+    retrograde_interpretation = Column(Text, nullable=True)  # meaning when planet is retrograde in this house
 
 
 class AspectInterpretation(Base):
@@ -77,6 +79,26 @@ class ChartShapeInterpretation(Base):
 
 class ChartDistributionInterpretation(Base):
     __tablename__ = "chart_distribution_interpretations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    distribution_key = Column(String(50), unique=True, nullable=False)
+    interpretation_text = Column(Text, nullable=False)
+
+
+class ModalityElementDistributionInterpretation(Base):
+    """
+    Interpretations for modality (cardinal, fixed, mutable) and element (fire, earth, air, water)
+    distribution based on planetary placements in signs.
+
+    Keys follow the pattern:
+      element_<fire|earth|air|water>_dominant  - that element has the most planets
+      element_balanced                        - no single element dominates
+      element_lacking_<fire|earth|air|water>  - that element has 0 planets (optional)
+
+      quality_<cardinal|fixed|mutable>_dominant - that modality has the most planets
+      quality_balanced                          - no single modality dominates
+    """
+    __tablename__ = "modality_element_distribution_interpretations"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     distribution_key = Column(String(50), unique=True, nullable=False)
