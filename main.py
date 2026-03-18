@@ -240,7 +240,6 @@ class HouseInterpretation(BaseModel):
 
 class ChartInterpretations(BaseModel):
     planet_in_sign: dict[str, str] = {}
-    planet_in_house: dict[str, str] = {}
     aspects: dict[str, str] = {}  # legacy keyed format
     big_three: BigThree = Field(default_factory=BigThree)
     house_interpretation: HouseInterpretation = Field(default_factory=HouseInterpretation)
@@ -488,9 +487,7 @@ async def _enrich_with_interpretations(
     sources: dict[str, str] = {}
     for key in planet_in_sign:
         sources[key] = "database"
-    planet_in_house = dict(interp.get("planet_in_house", {}))
-    for key in planet_in_house:
-        sources[key] = "database"
+    planet_in_house = dict(interp.get("planet_in_house", {}))  # used for per_house only
     aspects = dict(interp.get("aspects", {}))
     for key in aspects:
         sources[key] = "database"
@@ -503,19 +500,18 @@ async def _enrich_with_interpretations(
             planet_in_sign[key] = text
             sources[key] = "default"
 
-    # Merge built-in defaults for planet-in-house and aspects
+    # Merge built-in defaults for planet-in-house (used for per_house only) and aspects
     for key, text in get_default_planet_in_house(planet_house_pairs).items():
         if key not in planet_in_house:
             planet_in_house[key] = text
-            sources[key] = "default"
     for key, text in get_default_aspects(aspect_keys).items():
         if key not in aspects:
             aspects[key] = text
             sources[key] = "default"
 
-    # Placeholder keys: any key where content matches known placeholder patterns
+    # Placeholder keys: planet_in_sign and aspects only (planet_in_house lives in per_house)
     placeholder_keys: list[str] = []
-    for key, text in {**planet_in_sign, **planet_in_house, **aspects}.items():
+    for key, text in {**planet_in_sign, **aspects}.items():
         if is_placeholder_text(text):
             placeholder_keys.append(key)
 
@@ -597,7 +593,6 @@ async def _enrich_with_interpretations(
 
     chart.interpretations = ChartInterpretations(
         planet_in_sign=planet_in_sign,
-        planet_in_house=planet_in_house,
         aspects=aspects,
         big_three=big_three,
         house_interpretation=house_interpretation,

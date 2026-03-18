@@ -254,7 +254,6 @@ Specific interpretation per planet pair + aspect (e.g. Sun conjunct Moon).
 | API Path | Source | Key Format |
 |----------|--------|------------|
 | `interpretations.planet_in_sign` | planet_sign_interpretations | "Planet in Sign" |
-| `interpretations.planet_in_house` | planet_house_interpretations | "Planet in House N" |
 | `interpretations.aspects` | planet_aspect → aspect_type → aspect_interpretations (fallback chain) | "Planet1 Aspect Planet2" |
 | `interpretations.chart_shape.primary` | Detection logic | shape_key |
 | `interpretations.chart_shape.interpretation` | chart_shape_interpretations | shape_key |

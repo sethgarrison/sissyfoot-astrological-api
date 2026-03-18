@@ -36,7 +36,6 @@ async def test_chart_returns_interpretation_structure():
 
     interp = data.get("interpretations", {})
     assert "planet_in_sign" in interp
-    assert "planet_in_house" in interp
     assert "aspects" in interp
     assert "big_three" in interp
     assert "house_interpretation" in interp
@@ -65,24 +64,19 @@ async def test_interpretations_have_source_and_placeholder_metadata():
     sources = interp.get("sources", {})
     placeholder_keys = interp.get("placeholder_keys", [])
 
-    # Every planet_in_sign and planet_in_house key should have a source
+    # Every planet_in_sign and aspects key should have a source (planet_in_house lives in house_interpretation.per_house)
     for key in list(interp.get("planet_in_sign", {}).keys()):
         assert key in sources, f"planet_in_sign key {key} should have sources entry"
-        assert sources[key] in ("database", "default")
-
-    for key in list(interp.get("planet_in_house", {}).keys()):
-        assert key in sources
         assert sources[key] in ("database", "default")
 
     for key in list(interp.get("aspects", {}).keys()):
         assert key in sources
         assert sources[key] in ("database", "default")
 
-    # Placeholder keys should have placeholder text
+    # Placeholder keys should have placeholder text (planet_in_house lives in house_interpretation.per_house)
     for key in placeholder_keys:
         val = (
             interp.get("planet_in_sign", {}).get(key)
-            or interp.get("planet_in_house", {}).get(key)
             or interp.get("aspects", {}).get(key)
         )
         if val:

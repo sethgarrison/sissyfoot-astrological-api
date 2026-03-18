@@ -95,11 +95,11 @@ The chart response includes an `interpretations` object with planet-in-sign, pla
 
   On Render, use the **Shell** tab for your service (or a one-off job) to run this against the Postgres database.
 
-You can edit interpretations directly in the database. Keys: `planet_sign_interpretations`, `planet_house_interpretations`, `aspect_interpretations`, `chart_shape_interpretations`, `chart_distribution_interpretations`, `modality_element_distribution_interpretations`.
+**The database is the source of truth.** Edit interpretations directly in the DB — no CSV bulk updates. See **[docs/EDITING_DATABASE.md](docs/EDITING_DATABASE.md)** for SQLite/PostgreSQL commands, lookup IDs, and example `UPDATE`/`INSERT` statements.
 
 ### Export interpretations to CSV
 
-Export all interpretation tables to CSV for bulk editing (e.g., in Google Sheets or Excel):
+Export interpretation tables to CSV for reference or backup (not for re-import):
 
 ```bash
 # Activate your venv first, then:
