@@ -11,6 +11,8 @@ from database.models import (
     PlanetSignInterpretation,
     PlanetHouseInterpretation,
     AspectInterpretation,
+    PlanetAspectInterpretation,
+    SignHouseInterpretation,
     ChartShapeInterpretation,
     ChartDistributionInterpretation,
     ModalityElementDistributionInterpretation,
@@ -26,6 +28,7 @@ async def fetch_interpretations(
     distribution_keys: list[str],
     modality_element_keys: list[str] | None = None,
     retrograde_planets: set[str] | None = None,
+    rising_sign: Optional[str] = None,
 ) -> dict:
     """
     Fetch all relevant interpretations. Returns a dict matching the API response shape.
@@ -35,6 +38,7 @@ async def fetch_interpretations(
         "planet_in_sign": {},
         "planet_in_house": {},
         "aspects": {},
+        "rising_sign_interpretation": None,
         "chart_shape": {
             "primary": chart_shape,
             "interpretation": None,
@@ -119,22 +123,42 @@ async def fetch_interpretations(
             if pname in retrograde and row.retrograde_interpretation:
                 result["retrograde_interpretations"][key] = row.retrograde_interpretation
 
-    # Aspects - generic (aspect type only) for now
+    # Aspects - prefer planet-pair specific (PlanetAspectInterpretation), fall back to generic
     for aspect_key in aspect_keys:
-        # aspect_key could be "Sun square Moon" - we use the aspect name "Square"
-        # For now we only have generic aspect interpretations, so we need to map
-        # "Sun square Moon" -> lookup "Square"
+        # aspect_key: "Sun Square Moon" or "Venus Conjunction Mars"
         parts = aspect_key.split()
-        aspect_name = parts[-1] if len(parts) >= 2 else aspect_key  # "Square", "Trine", etc.
+        if len(parts) >= 3:
+            p1_name, aspect_name, p2_name = parts[0], parts[1], " ".join(parts[2:])
+        else:
+            aspect_name = parts[-1] if parts else aspect_key
+            p1_name = p2_name = None
         aid = aspect_by_name.get(aspect_name)
         if aid is None:
             continue
-        r = await session.execute(
-            select(AspectInterpretation.interpretation_text).where(
-                AspectInterpretation.aspect_id == aid
+        text = None
+        if p1_name and p2_name:
+            p1_id = planet_by_name.get(p1_name)
+            p2_id = planet_by_name.get(p2_name)
+            if p1_id is not None and p2_id is not None:
+                for pid1, pid2 in [(p1_id, p2_id), (p2_id, p1_id)]:
+                    r = await session.execute(
+                        select(PlanetAspectInterpretation.interpretation_text).where(
+                            PlanetAspectInterpretation.planet_1_id == pid1,
+                            PlanetAspectInterpretation.planet_2_id == pid2,
+                            PlanetAspectInterpretation.aspect_id == aid,
+                        )
+                    )
+                    row = r.one_or_none()
+                    if row:
+                        text = row[0]
+                        break
+        if text is None:
+            r = await session.execute(
+                select(AspectInterpretation.interpretation_text).where(
+                    AspectInterpretation.aspect_id == aid
+                )
             )
-        )
-        text = r.scalar_one_or_none()
+            text = r.scalar_one_or_none()
         if text:
             result["aspects"][aspect_key] = text
 
@@ -159,6 +183,21 @@ async def fetch_interpretations(
         text = r.scalar_one_or_none()
         if text:
             result["chart_shape"]["distribution"][dkey] = text
+
+    # Rising sign (SignHouseInterpretation: house 1 + rising sign)
+    if rising_sign:
+        sid = sign_by_name.get(rising_sign)
+        hid = house_by_num.get(1)
+        if sid and hid:
+            r = await session.execute(
+                select(SignHouseInterpretation.interpretation_text).where(
+                    SignHouseInterpretation.house_id == hid,
+                    SignHouseInterpretation.sign_id == sid,
+                )
+            )
+            row = r.one_or_none()
+            if row:
+                result["rising_sign_interpretation"] = row.interpretation_text
 
     # Modality/element distribution (from planetary placements by sign)
     for key in modality_element_keys or []:

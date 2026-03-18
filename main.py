@@ -182,6 +182,7 @@ class ChartInterpretations(BaseModel):
     planet_in_sign: dict[str, str] = {}
     planet_in_house: dict[str, str] = {}
     aspects: dict[str, str] = {}
+    rising_sign_interpretation: Optional[str] = None  # SignHouseInterpretation for house 1 + rising
     chart_shape: ChartShapeInfo = ChartShapeInfo()
     modality_element_distribution: dict[str, str] = {}  # e.g. element_fire_dominant -> interpretation
     retrograde_planets: list[str] = []  # planet names that are retrograde in this chart
@@ -397,6 +398,7 @@ async def _enrich_with_interpretations(
             distribution_keys=distribution_keys,
             modality_element_keys=modality_element_keys,
             retrograde_planets=retrograde_planets,
+            rising_sign=chart.rising_sign,
         )
         planet_in_sign = dict(interp["planet_in_sign"])
     except Exception:
@@ -404,6 +406,7 @@ async def _enrich_with_interpretations(
         interp = {
             "planet_in_house": {},
             "aspects": {},
+            "rising_sign_interpretation": None,
             "chart_shape": {"primary": chart_shape, "interpretation": None, "distribution": {}},
             "modality_element_distribution": {},
             "retrograde_planets": sorted(retrograde_planets),
@@ -432,6 +435,7 @@ async def _enrich_with_interpretations(
         planet_in_sign=planet_in_sign,
         planet_in_house=planet_in_house,
         aspects=aspects,
+        rising_sign_interpretation=interp.get("rising_sign_interpretation"),
         chart_shape=ChartShapeInfo(
             primary=interp.get("chart_shape", {}).get("primary"),
             interpretation=interp.get("chart_shape", {}).get("interpretation"),
