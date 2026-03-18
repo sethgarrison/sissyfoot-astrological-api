@@ -1,0 +1,136 @@
+id,aspect,interpretation_text,planet_1,planet_2
+1,Conjunction,Creations and reactions combine,sun,moon
+,Conjunction,Mind needs focus; excitement can burn and confuse,sun,mercury
+,Conjunction,Loving creative pleasure,sun,venus
+,Conjunction,Energetic creativity - beware impulsiveness,sun,mars
+,Conjunction,Full of hope and generosity - beware over-optimism,sun,jupiter
+,Conjunction,Acts in serious and sensible ways,sun,saturn
+,Conjunction,"Inventive, revolutionary personality",sun,uranus
+,Conjunction,"Spiritual, fascinating, unfathomable - vulnerable",sun,neptune
+,Conjunction,"Unusual, unnerving, explosive, courageous",sun,pluto
+,Conjunction,"Quick, intelligent, sensitive responses",moon,mercury
+,Conjunction,"Engaging, supportive, loving, very feminine",moon,venus
+,Conjunction,"Sudden, even combative; count before acting",moon,mars
+,Conjunction,"Generously sympathetic, goes out of way for others",moon,jupiter
+,Conjunction,"Emotionally restrained, defensive, even distrustful",moon,saturn
+,Conjunction,Electric and eccentric reactions,moon,uranus
+,Conjunction,"Drawn to fashion, art, even psychic experiences",moon,neptune
+,Conjunction,Prone to experiencing or creating trauma,moon,pluto
+,Conjunction,Loves to listen and talk to people,mercury,venus
+,Conjunction,Quick and combative thinker and speaker,mercury,mars
+,Conjunction,"Idealist theories, loquacious",mercury,jupiter
+,Conjunction,"Systematic, sensible, but tends to be obstructive",mercury,saturn
+,Conjunction,Innovative ideas on how we treat others,mercury,uranus
+,Conjunction,Expresses the unseen - often in art/entertainment,mercury,neptune
+,Conjunction,Shattering ideas that may not be easy to express,mercury,pluto
+,Conjunction,Ambiguity in relationships and gender identity,venus,mars
+,Conjunction,"Great generosity, wanting everyone to be happy",venus,jupiter
+,Conjunction,Cautious in love and financial commitments,venus,saturn
+,Conjunction,Enthusiasm for the thrill of the unusual,venus,uranus
+,Conjunction,"Loves fashion/art, seeks inspiration - avoid ""cons""",venus,neptune
+,Conjunction,Overwhelmed by love or lovers,venus,pluto
+,Conjunction,"Courageously, if thoughtlessly, leaps into action",mars,jupiter
+,Conjunction,Battles to break down obstacles or create barriers,mars,saturn
+,Conjunction,"Revolutionary actions, possibly troublemaking",mars,uranus
+,Conjunction,Strongly focused on unusual breakthroughs,mars,neptune
+,Conjunction,Dangerous actions,mars,pluto
+,Conjunction,Reconciling expansive opportunity with reality,jupiter,saturn
+,Conjunction,"Visionary idealism, seeking radical change",jupiter,uranus
+,Conjunction,Exploration of new beliefs and religious possibilities,jupiter,neptune
+,Conjunction,Expansive transformations of consciousness,jupiter,pluto
+,Conjunction,"Structural revolution, social upheaval",saturn,uranus
+,Conjunction,Spiritual realism and/or spiritual materialism,saturn,neptune
+,Conjunction,"Harsh, cold, difficult circumstances",saturn,pluto
+,Conjunction,Belief in radical change,uranus,neptune
+,Conjunction,Society in disarray and/or radical change,uranus,pluto
+,Conjunction,Fundamental change in nature of beliefs/possibilities,neptune,pluto
+1,Easy-Flowing,"Self-expression, feelings in harmony",sun,moon
+,Easy-Flowing,Good ideas make all seem possible (30° only),sun,mercury
+,Easy-Flowing,Happiness seems unending (30/60° only),sun,venus
+,Easy-Flowing,The power to do as we wish and carry all before us,sun,mars
+,Easy-Flowing,Feeling encouraged in all we wish to create,sun,jupiter
+,Easy-Flowing,"Having right discipline, something to depend on",sun,saturn
+,Easy-Flowing,Amazingly exciting changes show themselves,sun,uranus
+,Easy-Flowing,"Artistically enchanting, spiritually uplifting",sun,neptune
+,Easy-Flowing,"Can break through barriers, achieve the impossible",sun,pluto
+,Easy-Flowing,Capable of convincing most people of most ideas,moon,mercury
+,Easy-Flowing,"Pleasurable, easy-going, feeling good about people",moon,venus
+,Easy-Flowing,"Encouraging, full of confidence, unstoppable",moon,mars
+,Easy-Flowing,A natural wish to give everyone all they wish for,moon,jupiter
+,Easy-Flowing,Sensible approaches give strength to finish things,moon,saturn
+,Easy-Flowing,Sheer thrill of change and freedom,moon,uranus
+,Easy-Flowing,Involved in and inspired by what we do and believe,moon,neptune
+,Easy-Flowing,Handling danger with confidence,moon,pluto
+,Easy-Flowing,"Clever, lovely ideas",mercury,venus
+,Easy-Flowing,Confidence to challenge and easily convince,mercury,mars
+,Easy-Flowing,Open to idealism and stories of far-away places,mercury,jupiter
+,Easy-Flowing,"Structured understanding, intellectual frameworks",mercury,saturn
+,Easy-Flowing,Thinking about changing the world for the better,mercury,uranus
+,Easy-Flowing, Religions and secret wonders seem very possible,mercury,neptune
+,Easy-Flowing,Turns our ideas about reality upside down,mercury,pluto
+,Easy-Flowing,Complementary harmony of male and female,venus,mars
+,Easy-Flowing,Generosity and pleasure seem boundless,venus,jupiter
+,Easy-Flowing,In control of relationships and businesses,venus,saturn
+,Easy-Flowing,Exciting new people and enterprises,venus,uranus
+,Easy-Flowing,Beauty and great feelings open to deeper truth,venus,neptune
+,Easy-Flowing,Feeling good about a relationship or possibility,venus,pluto
+,Easy-Flowing,"Simply unstoppable, beware of overconfidence",mars,jupiter
+,Easy-Flowing,Realism and courage -the driving force of power,mars,saturn
+,Easy-Flowing,Everything can and will be changed,mars,uranus
+,Easy-Flowing,"Finding effective, incisive points of contact",mars,neptune
+,Easy-Flowing,Fearlessly face up to what needs to be done,mars,pluto
+,Easy-Flowing,Systems working effectively together,jupiter,saturn
+,Easy-Flowing,Flexible idealism aspires toward social justice,jupiter,uranus
+,Easy-Flowing,Possibilities are truly wondrous and without barriers,jupiter,neptune
+,Easy-Flowing,Beyond fear; nothing will stop us now,jupiter,pluto
+,Easy-Flowing,Finding ways around barriers- whatever the cost,saturn,uranus
+,Easy-Flowing,"Establishing and developing ""undeniable"" beliefs",saturn,neptune
+,Easy-Flowing,"Succeeding, or seeming to, when all is against us",saturn,pluto
+,Easy-Flowing,Beliefs that change everything,uranus,neptune
+,Easy-Flowing,Radical social change readily accepted,uranus,pluto
+,Easy-Flowing,"Reassessment of beliefs, taking centuries to unfold",neptune,pluto
+1,Stressful,Feeling pulled apart at quarter and full Moons,sun,moon
+,Stressful,Does not forin negative aspect,sun,mercury
+,Stressful,Does not form negative aspect,sun,venus
+,Stressful,Life struggles that make or break us,sun,mars
+,Stressful,"Difficult to resist going too far, look to the future",sun,jupiter
+,Stressful,Building confidence and systems fu suave,sun,saturn
+,Stressful,"Disruptive, troubled, crisis to transter",sun,uranus
+,Stressful,"Misguided, confused, uncertain, conking the butt",sun,neptune
+,Stressful,"Threatened, developing courage in adversity",sun,pluto
+,Stressful,"Emotional manipulation, serve truth, not guit",moon,mercury
+,Stressful,Overdependent on familiar comforts,moon,venus
+,Stressful,"Emotion-driven aggression or fear, needs mastering",moon,mars
+,Stressful,"Extravagant, over-indulgent, use all of this",moon,jupiter
+,Stressful,"Emotionally fraught, misunderstood: work out rules",moon,saturn
+,Stressful,"Feeling edgy, restless, do not take things personally",moon,uranus
+,Stressful,Manipulation of sympathies acts on unclear beliefs,moon,neptune
+,Stressful,Try to see that the only thing to fear is fear itself,moon,pluto
+,Stressful,"Misplaced affections, learn to trust (45° only)",mercury,venus
+,Stressful,Arguments do not end until we either win or let go,mercury,mars
+,Stressful,"Too much to say that's irrelevant, seek higher truth",mercury,jupiter
+,Stressful,See refusals and procedures as giving strength,mercury,saturn
+,Stressful,"Disruption, only accept change for the better",mercury,uranus
+,Stressful,"Lost in doubt, trust yourself - knowing gives control",mercury,neptune
+,Stressful,"Refuse to fear, then frightening thoughts will fade",mercury,pluto
+,Stressful,Battle or reconcile radical differences,venus,mars
+,Stressful,Over-indulging; apply discrimination,venus,jupiter
+,Stressful,Problems can make as well as break relationships,venus,saturn
+,Stressful,Don't love change for change's sake; need focus,venus,uranus
+,Stressful,"Captivated by the fantastic; rest, look, come back",venus,neptune
+,Stressful,Let go of attachment,venus,pluto
+,Stressful,Are we fighting and trying too hard?,mars,jupiter
+,Stressful,Breaking down barriers; what will replace them?,mars,saturn
+,Stressful,"Revolutionary actions destroy, what do they create?",mars,uranus
+,Stressful,Forcing beliefs on others is a futile process,mars,neptune
+,Stressful,Doing anything to succeed leaves death the victor,mars,pluto
+,Stressful,Reality's hard lessons create order out of excess,jupiter,saturn
+,Stressful,Aiming for the impossible brings no real benefit,jupiter,uranus
+,Stressful,Others may reject our well-intentioned beliefs,jupiter,neptune
+,Stressful,"Laissez-faire, ignoring dangers, has dire outcome",jupiter,pluto
+,Stressful,Facing the real consequences of change,saturn,uranus
+,Stressful,Misunderstanding brings pain; try devotion,saturn,neptune
+,Stressful,Serious situations require mature solutions,saturn,pluto
+,Stressful,"Doing right things for wrong reasons, or vice versa",uranus,neptune
+,Stressful,"Massive social upheaval, be ahead of the flow",uranus,pluto
+,Stressful,"Challenge to, and reconstruction of, belief systems",neptune,pluto

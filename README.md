@@ -95,7 +95,30 @@ The chart response includes an `interpretations` object with planet-in-sign, pla
 
   On Render, use the **Shell** tab for your service (or a one-off job) to run this against the Postgres database.
 
-You can edit interpretations directly in the database. Keys: `planet_sign_interpretations`, `planet_house_interpretations`, `aspect_interpretations`, `chart_shape_interpretations`, `chart_distribution_interpretations`.
+You can edit interpretations directly in the database. Keys: `planet_sign_interpretations`, `planet_house_interpretations`, `aspect_interpretations`, `chart_shape_interpretations`, `chart_distribution_interpretations`, `modality_element_distribution_interpretations`.
+
+### Export interpretations to CSV
+
+Export all interpretation tables to CSV for bulk editing (e.g., in Google Sheets or Excel):
+
+```bash
+# Activate your venv first, then:
+python -m scripts.export_interpretations
+```
+
+CSVs are written to the `data/` folder:
+
+| File | Contents |
+|------|----------|
+| `planets.csv`, `signs.csv`, `houses.csv`, `aspects.csv` | Reference data |
+| `planet_sign_interpretations.csv` | Planet + sign + interpretation_text + retrograde_interpretation |
+| `planet_house_interpretations.csv` | Planet + house + interpretation_text + retrograde_interpretation |
+| `aspect_interpretations.csv` | Aspect + interpretation_text |
+| `chart_shape_interpretations.csv` | shape_key + interpretation_text |
+| `chart_distribution_interpretations.csv` | distribution_key + interpretation_text |
+| `modality_element_distribution_interpretations.csv` | distribution_key + interpretation_text |
+
+**Note:** Seed the database first (`python -m database.seed`) so the export has data to write. There is currently no import script — after editing CSVs, update the database manually or via a migration.
 
 ## Deploy to Render (free)
 
