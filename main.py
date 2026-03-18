@@ -3,6 +3,7 @@ import re
 from fastapi import FastAPI, HTTPException, Query, Depends, Path
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+import httpx
 from kerykeion import AstrologicalSubject
 from kerykeion.aspects import AspectsFactory
 from typing import Optional
@@ -273,6 +274,17 @@ class NatalChart(BaseModel):
     reading_id: Optional[str] = None  # Use this to fetch via GET /readings/{reading_id}
 
 
+class LocationResult(BaseModel):
+    """Single location from /locations search for autocomplete."""
+
+    display: str  # Human-readable label for dropdown (e.g. "Laurel, Mississippi, United States")
+    city: str  # Exact string for chart API city param (e.g. "Laurel,MS")
+    nation: str  # ISO country code (e.g. "US")
+    timezone: str  # IANA timezone (e.g. "America/Chicago")
+    lat: float  # Latitude — client can use lat+lng+timezone for chart API
+    lng: float  # Longitude
+
+
 # Delimiter for reading identifier (URL-safe, avoids conflict with negative numbers)
 READING_ID_DELIM = "__"
 
@@ -431,6 +443,83 @@ def build_chart(
         aspects=aspects,
         interpretations=ChartInterpretations(),
     )
+
+
+# GeoNames base URLs (requires GEONAMES_USERNAME env var)
+GEONAMES_SEARCH = "https://api.geonames.org/searchJSON"
+GEONAMES_TIMEZONE = "https://api.geonames.org/timezoneJSON"
+_timezone_cache: dict[tuple[float, float], str] = {}
+
+
+async def _search_locations(q: str, limit: int) -> list[LocationResult]:
+    """
+    Search GeoNames for places, fetch timezone per result.
+    Requires GEONAMES_USERNAME env var.
+    """
+    username = os.environ.get("GEONAMES_USERNAME")
+    if not username:
+        return []
+    q = (q or "").strip()
+    if not q or len(q) < 2:
+        return []
+    limit = min(max(1, limit), 10)
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get(
+            GEONAMES_SEARCH,
+            params={
+                "q": q,
+                "maxRows": limit,
+                "username": username,
+                "featureClass": "P",  # populated places
+            },
+        )
+        r.raise_for_status()
+        data = r.json()
+    geonames = data.get("geonames") or []
+    results: list[LocationResult] = []
+    for g in geonames:
+        name = g.get("name") or g.get("toponymName") or ""
+        country_code = g.get("countryCode") or ""
+        admin_code = g.get("adminCode1") or ""
+        admin_name = g.get("adminName1") or ""
+        country_name = g.get("countryName") or ""
+        lat = float(g.get("lat", 0))
+        lng = float(g.get("lng", 0))
+        if not name or not country_code:
+            continue
+        cache_key = (round(lat, 4), round(lng, 4))
+        tz_str = _timezone_cache.get(cache_key)
+        if tz_str is None:
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    tz_r = await client.get(
+                        GEONAMES_TIMEZONE,
+                        params={"lat": lat, "lng": lng, "username": username},
+                    )
+                    tz_r.raise_for_status()
+                    tz_data = tz_r.json()
+                    tz_str = tz_data.get("timezoneId") or tz_data.get("timezone") or "UTC"
+            except Exception:
+                tz_str = "UTC"
+            _timezone_cache[cache_key] = tz_str
+        city = f"{name},{admin_code}" if admin_code else name
+        parts = [name]
+        if admin_name:
+            parts.append(admin_name)
+        if country_name:
+            parts.append(country_name)
+        display = ", ".join(parts)
+        results.append(
+            LocationResult(
+                display=display,
+                city=city,
+                nation=country_code,
+                timezone=tz_str,
+                lat=lat,
+                lng=lng,
+            )
+        )
+    return results
 
 
 async def _enrich_with_interpretations(
@@ -623,6 +712,19 @@ async def _save_reading(chart: NatalChart, session: AsyncSession) -> None:
     else:
         session.add(Reading(identifier=identifier, chart_data=chart_json))
     await session.flush()
+
+
+@app.get("/locations", response_model=list[LocationResult], summary="Search locations for birth place")
+async def get_locations(
+    q: str = Query(..., min_length=2, description="Partial place name (e.g. Laurel, New York, London)"),
+    limit: int = Query(10, ge=1, le=10, description="Max number of results"),
+):
+    """
+    Search for places by name. Returns display label, city, nation, timezone, and lat/lng.
+    Use for autocomplete — select a result to populate city, nation, and timezone (or lat+lng+timezone)
+    for the chart API. Requires GEONAMES_USERNAME env var.
+    """
+    return await _search_locations(q, limit)
 
 
 @app.get("/chart", response_model=NatalChart, summary="Generate a natal chart")

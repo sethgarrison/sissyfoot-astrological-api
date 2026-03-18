@@ -8,6 +8,7 @@ Returns planetary positions, house cusps, aspects, lunar phase, the big three (s
 
 | Method | Path               | Description                         |
 |--------|--------------------|-------------------------------------|
+| GET    | `/locations`       | Search locations for birth place (autocomplete) |
 | GET    | `/chart`           | Generate a natal chart (saves to DB)|
 | POST   | `/chart`           | Generate a natal chart (saves to DB)|
 | GET    | `/readings`        | List all saved readings              |
