@@ -50,6 +50,59 @@ class Aspect(Base):
     name = Column(String(50), unique=True, nullable=False)
     angle_degrees = Column(Integer, nullable=True)
     symbol = Column(String(10), nullable=True)
+    type_ = Column(String(30), nullable=True)  # conjunction, stressful, easy-flowing
+
+
+class SunSignInterpretation(Base):
+    """Sun in sign: Big Three. Keyed by sign. From Astro Data - sun.csv."""
+    __tablename__ = "sun_sign_interpretations"
+    __table_args__ = (UniqueConstraint("sign_id", name="uq_sun_sign"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    sign_id = Column(Integer, ForeignKey("signs.id"), nullable=False)
+    archetypes_balanced = Column(String(500), nullable=True)
+    archetypes_unbalanced = Column(String(500), nullable=True)
+    journey = Column(String(200), nullable=True)
+    gifts = Column(Text, nullable=True)
+    challenges = Column(Text, nullable=True)
+    interpretation = Column(Text, nullable=True)
+
+
+class MoonSignInterpretation(Base):
+    """Moon in sign: Big Three. Keyed by sign. From Astro Data - moon.csv."""
+    __tablename__ = "moon_sign_interpretations"
+    __table_args__ = (UniqueConstraint("sign_id", name="uq_moon_sign"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    sign_id = Column(Integer, ForeignKey("signs.id"), nullable=False)
+    nature = Column(String(500), nullable=True)
+    sources_of_contentment = Column(String(500), nullable=True)
+    keywords = Column(String(500), nullable=True)
+    interpretation = Column(Text, nullable=True)
+
+
+class AscendantSignInterpretation(Base):
+    """Ascendant/Rising in sign: Big Three. Keyed by sign. From Astro Data - ascendent.csv."""
+    __tablename__ = "ascendant_sign_interpretations"
+    __table_args__ = (UniqueConstraint("sign_id", name="uq_ascendant_sign"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    sign_id = Column(Integer, ForeignKey("signs.id"), nullable=False)
+    impression = Column(String(500), nullable=True)
+    appearance = Column(String(500), nullable=True)
+    childhood = Column(String(500), nullable=True)
+    balance = Column(String(500), nullable=True)
+    interpretation = Column(Text, nullable=True)
+
+
+class AspectTypeInterpretation(Base):
+    """Interpretation by aspect type (conjunction, stressful, easy-flowing). Type matters more than aspect name."""
+    __tablename__ = "aspect_type_interpretations"
+    __table_args__ = (UniqueConstraint("type_key", name="uq_aspect_type"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    type_key = Column(String(30), unique=True, nullable=False)  # conjunction, stressful, easy-flowing
+    interpretation_text = Column(Text, nullable=False)
 
 
 class PlanetSignInterpretation(Base):

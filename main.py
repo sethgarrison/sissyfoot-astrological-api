@@ -18,6 +18,7 @@ from interpretations.defaults import (
     get_default_planet_in_house,
     get_default_aspects,
 )
+from interpretations.data_quality import is_placeholder_text
 from interpretations.lookup import fetch_interpretations
 
 
@@ -143,6 +144,10 @@ class AspectInfo(BaseModel):
     aspect_degrees: int
     orbit: float
     movement: Optional[str] = None
+    type: Optional[str] = None  # conjunction, stressful, easy-flowing
+    interpretation: Optional[str] = None
+    source: Optional[str] = None  # "database" | "default" — where interpretation came from
+    is_placeholder: bool = False  # true if content is a fill-in placeholder
 
 
 class LunarPhase(BaseModel):
@@ -178,15 +183,74 @@ class SignPlacementOverview(BaseModel):
     by_element: dict[str, ElementDistribution] = {}  # fire, earth, air, water
 
 
+class BigThreeSun(BaseModel):
+    sign: str
+    archetypes_balanced: Optional[str] = None
+    archetypes_unbalanced: Optional[str] = None
+    journey: Optional[str] = None
+    gifts: Optional[str] = None
+    challenges: Optional[str] = None
+    interpretation: Optional[str] = None
+    sign_interpretation: Optional[str] = None
+    source: Optional[str] = None  # "database" - only set when from DB
+    is_placeholder: bool = False  # true when content is a fill-in placeholder
+
+
+class BigThreeMoon(BaseModel):
+    sign: str
+    nature: Optional[str] = None
+    sources_of_contentment: Optional[str] = None
+    keywords: Optional[str] = None
+    interpretation: Optional[str] = None
+    source: Optional[str] = None  # "database"
+    is_placeholder: bool = False
+
+
+class BigThreeAscendant(BaseModel):
+    sign: str
+    impression: Optional[str] = None
+    appearance: Optional[str] = None
+    childhood: Optional[str] = None
+    balance: Optional[str] = None
+    interpretation: Optional[str] = None
+    source: Optional[str] = None  # "database"
+    is_placeholder: bool = False
+
+
+class BigThree(BaseModel):
+    sun: Optional[BigThreeSun] = None
+    moon: Optional[BigThreeMoon] = None
+    ascendant: Optional[BigThreeAscendant] = None
+
+
+class PerHouseInfo(BaseModel):
+    house: int
+    sign_on_cusp: str
+    planets: list[str] = []
+    planet_interpretations: dict[str, str] = {}  # "Planet in House N" -> text
+    sign_interpretation: Optional[str] = None
+
+
+class HouseInterpretation(BaseModel):
+    per_house: list[PerHouseInfo] = []
+    shape: ChartShapeInfo = ChartShapeInfo()
+    quadrant: dict[str, str] = {}  # quadrant_1, etc. -> interpretation
+    hemisphere: dict[str, str] = {}  # hemisphere_northern, etc. -> interpretation
+
+
 class ChartInterpretations(BaseModel):
     planet_in_sign: dict[str, str] = {}
     planet_in_house: dict[str, str] = {}
-    aspects: dict[str, str] = {}
+    aspects: dict[str, str] = {}  # legacy keyed format
+    big_three: BigThree = Field(default_factory=BigThree)
+    house_interpretation: HouseInterpretation = Field(default_factory=HouseInterpretation)
     rising_sign_interpretation: Optional[str] = None  # SignHouseInterpretation for house 1 + rising
     chart_shape: ChartShapeInfo = ChartShapeInfo()
     modality_element_distribution: dict[str, str] = {}  # e.g. element_fire_dominant -> interpretation
     retrograde_planets: list[str] = []  # planet names that are retrograde in this chart
     retrograde_interpretations: dict[str, str] = {}  # e.g. "Mercury in Gemini" -> retrograde meaning
+    sources: dict[str, str] = {}  # "Sun in Aries" -> "database"|"default" — client can identify gaps
+    placeholder_keys: list[str] = []  # keys where content is a fill-in placeholder
 
 
 class NatalChart(BaseModel):
@@ -389,6 +453,7 @@ async def _enrich_with_interpretations(
     modality_element_keys = detect_modality_element_keys(by_quality, by_element)
     retrograde_planets = {p.name for p in chart.planets if p.retrograde}
     try:
+        house_cusps = [(h.number, h.sign) for h in chart.houses]
         interp = await fetch_interpretations(
             session,
             planet_sign_pairs=planet_sign_pairs,
@@ -399,6 +464,9 @@ async def _enrich_with_interpretations(
             modality_element_keys=modality_element_keys,
             retrograde_planets=retrograde_planets,
             rising_sign=chart.rising_sign,
+            sun_sign=chart.sun_sign,
+            moon_sign=chart.moon_sign,
+            house_cusps=house_cusps,
         )
         planet_in_sign = dict(interp["planet_in_sign"])
     except Exception:
@@ -406,6 +474,9 @@ async def _enrich_with_interpretations(
         interp = {
             "planet_in_house": {},
             "aspects": {},
+            "aspects_detail": {},
+            "big_three": {"sun": None, "moon": None, "ascendant": None},
+            "house_sign_interpretations": {},
             "rising_sign_interpretation": None,
             "chart_shape": {"primary": chart_shape, "interpretation": None, "distribution": {}},
             "modality_element_distribution": {},
@@ -413,28 +484,123 @@ async def _enrich_with_interpretations(
             "retrograde_interpretations": {},
         }
 
+    # Track source for each interpretation: "database" or "default"
+    sources: dict[str, str] = {}
+    for key in planet_in_sign:
+        sources[key] = "database"
+    planet_in_house = dict(interp.get("planet_in_house", {}))
+    for key in planet_in_house:
+        sources[key] = "database"
+    aspects = dict(interp.get("aspects", {}))
+    for key in aspects:
+        sources[key] = "database"
+
     # Merge built-in defaults for Sun, Moon, Rising (always include when missing)
     for key, text in get_default_planet_in_sign(
         chart.sun_sign, chart.moon_sign, chart.rising_sign
     ).items():
         if key not in planet_in_sign:
             planet_in_sign[key] = text
+            sources[key] = "default"
 
     # Merge built-in defaults for planet-in-house and aspects
-    planet_in_house = dict(interp.get("planet_in_house", {}))
     for key, text in get_default_planet_in_house(planet_house_pairs).items():
         if key not in planet_in_house:
             planet_in_house[key] = text
-
-    aspects = dict(interp.get("aspects", {}))
+            sources[key] = "default"
     for key, text in get_default_aspects(aspect_keys).items():
         if key not in aspects:
             aspects[key] = text
+            sources[key] = "default"
+
+    # Placeholder keys: any key where content matches known placeholder patterns
+    placeholder_keys: list[str] = []
+    for key, text in {**planet_in_sign, **planet_in_house, **aspects}.items():
+        if is_placeholder_text(text):
+            placeholder_keys.append(key)
+
+    aspects_detail = interp.get("aspects_detail", {})
+    for a in chart.aspects:
+        key = f"{a.planet1} {a.aspect} {a.planet2}"
+        detail = aspects_detail.get(key, {})
+        a.type = detail.get("type")
+        interp_text = detail.get("interpretation") or aspects.get(key)
+        a.interpretation = interp_text
+        a.source = sources.get(key)
+        a.is_placeholder = is_placeholder_text(interp_text) if interp_text else False
+
+    bt = interp.get("big_three", {})
+    def _bt_sun():
+        d = bt.get("sun")
+        if not d:
+            return None
+        interp_val = d.get("interpretation") or d.get("sign_interpretation")
+        return BigThreeSun(
+            **d,
+            source="database",
+            is_placeholder=is_placeholder_text(interp_val),
+        )
+    def _bt_moon():
+        d = bt.get("moon")
+        if not d:
+            return None
+        return BigThreeMoon(
+            **d,
+            source="database",
+            is_placeholder=is_placeholder_text(d.get("interpretation")),
+        )
+    def _bt_asc():
+        d = bt.get("ascendant")
+        if not d:
+            return None
+        return BigThreeAscendant(
+            **d,
+            source="database",
+            is_placeholder=is_placeholder_text(d.get("interpretation")),
+        )
+    big_three = BigThree(sun=_bt_sun(), moon=_bt_moon(), ascendant=_bt_asc())
+    house_dicts = {h.number: h for h in chart.houses}
+    planets_by_house: dict[int, list[str]] = {}
+    for p in chart.planets:
+        planets_by_house.setdefault(p.house, []).append(p.name)
+    per_house: list[PerHouseInfo] = []
+    for num in range(1, 13):
+        h = house_dicts.get(num)
+        sign_on_cusp = h.sign if h else ""
+        planets = planets_by_house.get(num, [])
+        planet_interpretations = {k: v for k, v in planet_in_house.items() if f" in House {num}" in k and any(p in k for p in planets)}
+        sign_interp = None
+        if h and sign_on_cusp:
+            sign_interp = interp.get("house_sign_interpretations", {}).get((num, sign_on_cusp))
+        if sign_interp is None and num == 1:
+            sign_interp = interp.get("rising_sign_interpretation")
+        per_house.append(PerHouseInfo(
+            house=num,
+            sign_on_cusp=sign_on_cusp,
+            planets=planets,
+            planet_interpretations=planet_interpretations,
+            sign_interpretation=sign_interp,
+        ))
+    dist = interp.get("chart_shape", {}).get("distribution", {})
+    quadrant_keys = [k for k in dist if "quadrant" in k]
+    hemisphere_keys = [k for k in dist if "hemisphere" in k and "spread" not in k]
+    house_interpretation = HouseInterpretation(
+        per_house=per_house,
+        shape=ChartShapeInfo(
+            primary=interp.get("chart_shape", {}).get("primary"),
+            interpretation=interp.get("chart_shape", {}).get("interpretation"),
+            distribution=dist,
+        ),
+        quadrant={k: dist[k] for k in quadrant_keys},
+        hemisphere={k: dist[k] for k in hemisphere_keys},
+    )
 
     chart.interpretations = ChartInterpretations(
         planet_in_sign=planet_in_sign,
         planet_in_house=planet_in_house,
         aspects=aspects,
+        big_three=big_three,
+        house_interpretation=house_interpretation,
         rising_sign_interpretation=interp.get("rising_sign_interpretation"),
         chart_shape=ChartShapeInfo(
             primary=interp.get("chart_shape", {}).get("primary"),
@@ -444,6 +610,8 @@ async def _enrich_with_interpretations(
         modality_element_distribution=interp.get("modality_element_distribution", {}),
         retrograde_planets=interp.get("retrograde_planets", []),
         retrograde_interpretations=interp.get("retrograde_interpretations", {}),
+        sources=sources,
+        placeholder_keys=placeholder_keys,
     )
     return chart
 

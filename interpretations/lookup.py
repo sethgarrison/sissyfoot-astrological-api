@@ -8,6 +8,10 @@ from database.models import (
     Sign,
     House,
     Aspect,
+    SunSignInterpretation,
+    MoonSignInterpretation,
+    AscendantSignInterpretation,
+    AspectTypeInterpretation,
     PlanetSignInterpretation,
     PlanetHouseInterpretation,
     AspectInterpretation,
@@ -29,6 +33,9 @@ async def fetch_interpretations(
     modality_element_keys: list[str] | None = None,
     retrograde_planets: set[str] | None = None,
     rising_sign: Optional[str] = None,
+    sun_sign: Optional[str] = None,
+    moon_sign: Optional[str] = None,
+    house_cusps: list[tuple[int, str]] | None = None,
 ) -> dict:
     """
     Fetch all relevant interpretations. Returns a dict matching the API response shape.
@@ -38,6 +45,9 @@ async def fetch_interpretations(
         "planet_in_sign": {},
         "planet_in_house": {},
         "aspects": {},
+        "aspects_detail": {},  # aspect_key -> {type, interpretation}
+        "big_three": {"sun": None, "moon": None, "ascendant": None},
+        "house_sign_interpretations": {},  # (house_num, sign) -> interpretation
         "rising_sign_interpretation": None,
         "chart_shape": {
             "primary": chart_shape,
@@ -72,8 +82,9 @@ async def fetch_interpretations(
 
     planet_by_name = {p.name: p.id for p in planet_rows}
     sign_by_name = {s.name: s.id for s in sign_rows}
+    sign_by_name_obj = {s.name: s for s in sign_rows}
     house_by_num = {h.number: h.id for h in house_rows}
-    aspect_by_name = {a.name: a.id for a in aspect_rows}
+    aspect_by_name = {a.name: a for a in aspect_rows}  # full object for type_
 
     retrograde = retrograde_planets or set()
     if retrograde:
@@ -132,9 +143,11 @@ async def fetch_interpretations(
         else:
             aspect_name = parts[-1] if parts else aspect_key
             p1_name = p2_name = None
-        aid = aspect_by_name.get(aspect_name)
-        if aid is None:
+        aspect_obj = aspect_by_name.get(aspect_name)
+        if aspect_obj is None:
             continue
+        aid = aspect_obj.id
+        type_val = aspect_obj.type_ or None
         text = None
         if p1_name and p2_name:
             p1_id = planet_by_name.get(p1_name)
@@ -152,6 +165,13 @@ async def fetch_interpretations(
                     if row:
                         text = row[0]
                         break
+        if text is None and type_val:
+            r = await session.execute(
+                select(AspectTypeInterpretation.interpretation_text).where(
+                    AspectTypeInterpretation.type_key == type_val
+                )
+            )
+            text = r.scalar_one_or_none()
         if text is None:
             r = await session.execute(
                 select(AspectInterpretation.interpretation_text).where(
@@ -161,6 +181,7 @@ async def fetch_interpretations(
             text = r.scalar_one_or_none()
         if text:
             result["aspects"][aspect_key] = text
+        result["aspects_detail"][aspect_key] = {"type": type_val, "interpretation": text}
 
     # Chart shape
     if chart_shape:
@@ -199,6 +220,21 @@ async def fetch_interpretations(
             if row:
                 result["rising_sign_interpretation"] = row.interpretation_text
 
+    # Sign on each house cusp (SignHouseInterpretation)
+    for house_num, sign_name in (house_cusps or []):
+        sid = sign_by_name.get(sign_name)
+        hid = house_by_num.get(house_num)
+        if sid and hid:
+            r = await session.execute(
+                select(SignHouseInterpretation.interpretation_text).where(
+                    SignHouseInterpretation.house_id == hid,
+                    SignHouseInterpretation.sign_id == sid,
+                )
+            )
+            row = r.one_or_none()
+            if row:
+                result["house_sign_interpretations"][(house_num, sign_name)] = row.interpretation_text
+
     # Modality/element distribution (from planetary placements by sign)
     for key in modality_element_keys or []:
         r = await session.execute(
@@ -209,5 +245,63 @@ async def fetch_interpretations(
         text = r.scalar_one_or_none()
         if text:
             result["modality_element_distribution"][key] = text
+
+    # Big Three: sun, moon, ascendant from dedicated tables
+    if sun_sign:
+        sid = sign_by_name.get(sun_sign)
+        if sid:
+            r = await session.execute(
+                select(SunSignInterpretation).where(
+                    SunSignInterpretation.sign_id == sid
+                )
+            )
+            sun_row = r.scalar_one_or_none()
+            if sun_row:
+                sign_obj = sign_by_name_obj.get(sun_sign)
+                result["big_three"]["sun"] = {
+                    "sign": sun_sign,
+                    "archetypes_balanced": sun_row.archetypes_balanced,
+                    "archetypes_unbalanced": sun_row.archetypes_unbalanced,
+                    "journey": sun_row.journey,
+                    "gifts": sun_row.gifts,
+                    "challenges": sun_row.challenges,
+                    "interpretation": sun_row.interpretation,
+                    "sign_interpretation": sign_obj.interpretation if sign_obj else None,
+                }
+    if moon_sign:
+        sid = sign_by_name.get(moon_sign)
+        if sid:
+            r = await session.execute(
+                select(MoonSignInterpretation).where(
+                    MoonSignInterpretation.sign_id == sid
+                )
+            )
+            moon_row = r.scalar_one_or_none()
+            if moon_row:
+                result["big_three"]["moon"] = {
+                    "sign": moon_sign,
+                    "nature": moon_row.nature,
+                    "sources_of_contentment": moon_row.sources_of_contentment,
+                    "keywords": moon_row.keywords,
+                    "interpretation": moon_row.interpretation,
+                }
+    if rising_sign:
+        sid = sign_by_name.get(rising_sign)
+        if sid:
+            r = await session.execute(
+                select(AscendantSignInterpretation).where(
+                    AscendantSignInterpretation.sign_id == sid
+                )
+            )
+            asc_row = r.scalar_one_or_none()
+            if asc_row:
+                result["big_three"]["ascendant"] = {
+                    "sign": rising_sign,
+                    "impression": asc_row.impression,
+                    "appearance": asc_row.appearance,
+                    "childhood": asc_row.childhood,
+                    "balance": asc_row.balance,
+                    "interpretation": asc_row.interpretation,
+                }
 
     return result

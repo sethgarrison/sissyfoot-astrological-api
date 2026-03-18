@@ -54,10 +54,75 @@ Client reference for all database models, fields, relationships, and API mapping
 | name | String(50) | No | Unique (Conjunction, Opposition, Square, Trine, Sextile, Quincunx) |
 | angle_degrees | Integer | Yes | 0, 60, 90, 120, 150, 180 |
 | symbol | String(10) | Yes | Astrological symbol |
+| type_ | String(30) | Yes | conjunction, stressful, easy-flowing |
 
 ---
 
 ## Interpretation Tables
+
+### SunSignInterpretation (Big Three)
+**Unique:** (sign_id)
+
+Sun in sign: dedicated Big Three table. Source: Astro Data - sun.csv.
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| id | Integer | PK | Auto-increment |
+| sign_id | FK → signs.id | No | |
+| archetypes_balanced | String(500) | Yes | Healthy archetypal expression |
+| archetypes_unbalanced | String(500) | Yes | Shadow expression |
+| journey | String(200) | Yes | Developmental theme |
+| gifts | Text | Yes | Natural strengths |
+| challenges | Text | Yes | Growth areas |
+| interpretation | Text | Yes | Full Sun-in-sign interpretation |
+
+---
+
+### MoonSignInterpretation (Big Three)
+**Unique:** (sign_id)
+
+Moon in sign: dedicated Big Three table. Source: Astro Data - moon.csv.
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| id | Integer | PK | Auto-increment |
+| sign_id | FK → signs.id | No | |
+| nature | String(500) | Yes | Emotional nature |
+| sources_of_contentment | String(500) | Yes | What brings contentment |
+| keywords | String(500) | Yes | Comma-separated |
+| interpretation | Text | Yes | Full Moon-in-sign interpretation |
+
+---
+
+### AscendantSignInterpretation (Big Three)
+**Unique:** (sign_id)
+
+Ascendant/Rising in sign: dedicated Big Three table. Source: Astro Data - ascendent.csv.
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| id | Integer | PK | Auto-increment |
+| sign_id | FK → signs.id | No | |
+| impression | String(500) | Yes | How others perceive |
+| appearance | String(500) | Yes | Physical presentation |
+| childhood | String(500) | Yes | Early-life themes |
+| balance | String(500) | Yes | Balancing theme |
+| interpretation | Text | Yes | Full Ascendant-in-sign interpretation |
+
+---
+
+### AspectTypeInterpretation
+**Unique:** (type_key)
+
+Interpretation by aspect type (conjunction, stressful, easy-flowing). Type drives meaning more than aspect name. Fallback when no planet-pair specific interpretation exists.
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| id | Integer | PK | Auto-increment |
+| type_key | String(30) | No | conjunction, stressful, easy-flowing |
+| interpretation_text | Text | No | Type-based meaning |
+
+---
 
 ### PlanetSignInterpretation
 **Unique:** (planet_id, sign_id)
@@ -135,7 +200,7 @@ Specific interpretation per planet pair + aspect (e.g. Sun conjunct Moon).
 | aspect_id | FK → aspects.id | No | |
 | interpretation_text | Text | No | Planet-pair specific meaning |
 
-**API key format:** `"Planet1 aspect Planet2"` (e.g. `"Sun Conjunction Moon"`). Lookup prefers this table when row exists; falls back to AspectInterpretation.
+**API key format:** `"Planet1 aspect Planet2"` (e.g. `"Sun Conjunction Moon"`). Lookup order: PlanetAspectInterpretation → AspectTypeInterpretation (by aspect.type_) → AspectInterpretation.
 
 ---
 
@@ -190,7 +255,7 @@ Specific interpretation per planet pair + aspect (e.g. Sun conjunct Moon).
 |----------|--------|------------|
 | `interpretations.planet_in_sign` | planet_sign_interpretations | "Planet in Sign" |
 | `interpretations.planet_in_house` | planet_house_interpretations | "Planet in House N" |
-| `interpretations.aspects` | planet_aspect_interpretations (prefer) or aspect_interpretations | "Planet1 Aspect Planet2" |
+| `interpretations.aspects` | planet_aspect → aspect_type → aspect_interpretations (fallback chain) | "Planet1 Aspect Planet2" |
 | `interpretations.chart_shape.primary` | Detection logic | shape_key |
 | `interpretations.chart_shape.interpretation` | chart_shape_interpretations | shape_key |
 | `interpretations.chart_shape.distribution` | chart_distribution_interpretations | distribution_key |
@@ -198,6 +263,38 @@ Specific interpretation per planet pair + aspect (e.g. Sun conjunct Moon).
 | `interpretations.retrograde_planets` | chart.planets where retrograde=true | — |
 | `interpretations.retrograde_interpretations` | planet_sign/planet_house retrograde_interpretation | Same as planet_in_sign/house |
 | `interpretations.rising_sign_interpretation` | sign_house_interpretations (house 1 + rising sign) | — |
+| `interpretations.big_three` | sun_sign_interpretations, moon_sign_interpretations, ascendant_sign_interpretations | sun, moon, ascendant objects keyed by sign |
+| `interpretations.house_interpretation` | per_house (planet_house + sign_house), shape, quadrant, hemisphere | Built from planet/house data + chart_shape + distribution |
+| `chart.aspects[].type` | aspects.type_ | conjunction, stressful, easy-flowing |
+| `chart.aspects[].interpretation` | planet_aspect → aspect_type → aspect_interpretations | Per-aspect interpretation |
+
+---
+
+## Data Quality Metadata (Client-Side Placeholder Detection)
+
+The API exposes metadata so clients can identify placeholder content and data gaps:
+
+| Field | Description |
+|-------|-------------|
+| `interpretations.sources` | Dict: interpretation key → `"database"` or `"default"`. `"database"` = from your DB; `"default"` = built-in fallback. |
+| `interpretations.placeholder_keys` | List of keys where content matches known placeholder patterns (e.g. `"[Add interpretation]"`). Use to flag data that needs filling. |
+| `interpretations.big_three.sun/moon/ascendant.source` | `"database"` when from DB; absent when using defaults. |
+| `interpretations.big_three.sun/moon/ascendant.is_placeholder` | `true` when interpretation text is a fill-in placeholder. |
+| `chart.aspects[].source` | `"database"` or `"default"` (or null if no interpretation). |
+| `chart.aspects[].is_placeholder` | `true` when interpretation matches placeholder pattern. |
+
+**Placeholder patterns** (see `interpretations/data_quality.py`): `[Add interpretation`, `[Add your interpretation`, `[Add interpretation for`, `: [Add your interpretation here]`.
+
+---
+
+## Seed Preserve Logic
+
+`database.seed_from_csv` **preserves existing non-placeholder content** by default. It will not overwrite real data with empty or placeholder values from CSV. Use `--overwrite` to force updates:
+
+```bash
+python -m database.seed_from_csv           # Preserve mode (default)
+python -m database.seed_from_csv --overwrite   # Force overwrite
+```
 
 ---
 

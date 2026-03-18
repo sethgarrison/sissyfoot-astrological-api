@@ -1,14 +1,21 @@
 """
 Seed database from CSVs in data/new/. Run after init_db.
 Loads and updates interpretations from your filled-in data.
-Usage: python -m database.seed_from_csv
+
+By default, preserves existing non-placeholder content (won't overwrite real data
+with empty/placeholder values from CSV). Use --overwrite to force updates.
+
+Usage: python -m database.seed_from_csv [--overwrite]
 """
+import argparse
 import asyncio
 import csv
 from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from interpretations.data_quality import is_placeholder_text
 
 from .connection import AsyncSessionLocal, init_db
 from .models import (
@@ -22,6 +29,10 @@ from .models import (
     ChartDistributionInterpretation,
     SignHouseInterpretation,
     PlanetAspectInterpretation,
+    SunSignInterpretation,
+    MoonSignInterpretation,
+    AscendantSignInterpretation,
+    AspectTypeInterpretation,
 )
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "new"
@@ -42,7 +53,25 @@ def _read_csv(path: Path) -> list[dict]:
     return rows
 
 
-async def load_from_csv(session: AsyncSession) -> None:
+def _is_real_content(val) -> bool:
+    """True if value has meaningful non-placeholder content."""
+    if val is None or (isinstance(val, str) and not val.strip()):
+        return False
+    return not is_placeholder_text(str(val))
+
+
+def _should_update_field(existing_val, new_val: str | None, overwrite: bool) -> bool:
+    """When overwrite=False, preserve existing real content from empty/placeholder CSV values."""
+    if overwrite:
+        return True
+    if not new_val or (isinstance(new_val, str) and not new_val.strip()):
+        return False  # Never overwrite with empty
+    if is_placeholder_text(str(new_val)):
+        return not _is_real_content(existing_val)  # Don't overwrite real with placeholder
+    return True  # New is real content, always update
+
+
+async def load_from_csv(session: AsyncSession, *, overwrite: bool = False) -> None:
     """Load interpretation data from data/new/ CSVs."""
     if not DATA_DIR.exists():
         print(f"Data directory not found: {DATA_DIR}")
@@ -98,6 +127,126 @@ async def load_from_csv(session: AsyncSession) -> None:
             h.subtitle = row.get("subtitle") or h.subtitle
             h.keywords = row.get("keywords") or h.keywords
             session.add(h)
+
+    # 3b. Update Aspects from aspects.csv (type column: conjunction, stressful, easy-flowing)
+    for row in _read_csv(_csv_path("aspects.csv")):
+        name = (row.get("name") or "").strip()
+        type_val = (row.get("type") or "").strip()
+        if not name:
+            continue
+        a = aspect_by_name.get(name.lower())
+        if a and type_val:
+            a.type_ = type_val
+            session.add(a)
+
+    # 3c. Sun sign interpretations (Big Three) from sun.csv
+    for row in _read_csv(_csv_path("sun.csv")):
+        name = (row.get("Signs") or row.get("signs") or row.get("name") or "").strip()
+        if not name:
+            continue
+        sid = sign_by_name.get(name.lower())
+        if not sid:
+            continue
+        existing = (
+            await session.execute(
+                select(SunSignInterpretation).where(
+                    SunSignInterpretation.sign_id == sid.id,
+                )
+            )
+        ).scalar_one_or_none()
+        data = {
+            "archetypes_balanced": (row.get("archetypes_balanced") or "").strip() or None,
+            "archetypes_unbalanced": (row.get("archetypes_unbalanced") or "").strip() or None,
+            "journey": (row.get("journey") or "").strip() or None,
+            "gifts": (row.get("gifts") or "").strip() or None,
+            "challenges": (row.get("challenges") or "").strip() or None,
+            "interpretation": (row.get("interpretation") or "").strip() or None,
+        }
+        if existing:
+            for k, v in data.items():
+                if v is not None and _should_update_field(getattr(existing, k, None), v, overwrite):
+                    setattr(existing, k, v)
+            session.add(existing)
+        else:
+            session.add(SunSignInterpretation(sign_id=sid.id, **data))
+
+    # 3d. Moon sign interpretations (Big Three) from moon.csv
+    for row in _read_csv(_csv_path("moon.csv")):
+        name = (row.get("signs") or row.get("Signs") or row.get("name") or "").strip()
+        if not name:
+            continue
+        sid = sign_by_name.get(name.lower())
+        if not sid:
+            continue
+        existing = (
+            await session.execute(
+                select(MoonSignInterpretation).where(
+                    MoonSignInterpretation.sign_id == sid.id,
+                )
+            )
+        ).scalar_one_or_none()
+        keywords = (row.get("keywords") or row.get("kewords") or "").strip() or None
+        data = {
+            "nature": (row.get("nature") or "").strip() or None,
+            "sources_of_contentment": (row.get("sources_of_contentment") or "").strip() or None,
+            "keywords": keywords,
+            "interpretation": (row.get("interpretation") or "").strip() or None,
+        }
+        if existing:
+            for k, v in data.items():
+                if v is not None and _should_update_field(getattr(existing, k, None), v, overwrite):
+                    setattr(existing, k, v)
+            session.add(existing)
+        else:
+            session.add(MoonSignInterpretation(sign_id=sid.id, **data))
+
+    # 3e. Ascendant sign interpretations (Big Three) from ascendent.csv
+    for row in _read_csv(_csv_path("ascendent.csv")):
+        name = (row.get("sign") or row.get("Sign") or row.get("name") or "").strip()
+        if not name:
+            continue
+        sid = sign_by_name.get(name.lower())
+        if not sid:
+            continue
+        existing = (
+            await session.execute(
+                select(AscendantSignInterpretation).where(
+                    AscendantSignInterpretation.sign_id == sid.id,
+                )
+            )
+        ).scalar_one_or_none()
+        data = {
+            "impression": (row.get("impression") or "").strip() or None,
+            "appearance": (row.get("appearance") or "").strip() or None,
+            "childhood": (row.get("childhood") or "").strip() or None,
+            "balance": (row.get("balance") or "").strip() or None,
+            "interpretation": (row.get("interpretation") or "").strip() or None,
+        }
+        if existing:
+            for k, v in data.items():
+                if v is not None and _should_update_field(getattr(existing, k, None), v, overwrite):
+                    setattr(existing, k, v)
+            session.add(existing)
+        else:
+            session.add(AscendantSignInterpretation(sign_id=sid.id, **data))
+
+    # 3f. Aspect type interpretations (conjunction, stressful, easy-flowing)
+    for type_key in ("conjunction", "stressful", "easy-flowing"):
+        existing = (
+            await session.execute(
+                select(AspectTypeInterpretation).where(
+                    AspectTypeInterpretation.type_key == type_key,
+                )
+            )
+        ).scalar_one_or_none()
+        if not existing:
+            label = type_key.replace("-", " ").replace("_", " ").title()
+            session.add(
+                AspectTypeInterpretation(
+                    type_key=type_key,
+                    interpretation_text=f"[Add interpretation for {label} aspects]",
+                )
+            )
 
     await session.flush()
 
@@ -310,6 +459,9 @@ async def load_from_csv(session: AsyncSession) -> None:
 
 
 async def main():
+    parser = argparse.ArgumentParser(description="Seed DB from CSV (preserves existing real data by default)")
+    parser.add_argument("--overwrite", action="store_true", help="Overwrite all fields; default preserves non-placeholder content")
+    args = parser.parse_args()
     await init_db()
     async with AsyncSessionLocal() as session:
         # Ensure reference data exists (run database.seed first if needed)
@@ -317,7 +469,7 @@ async def main():
         if not planets:
             print("Reference data missing. Run 'python -m database.seed' first.")
             return
-        await load_from_csv(session)
+        await load_from_csv(session, overwrite=args.overwrite)
 
 
 if __name__ == "__main__":
