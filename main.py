@@ -2,6 +2,7 @@ import os
 import re
 from fastapi import FastAPI, HTTPException, Query, Depends, Path
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import httpx
 from kerykeion import AstrologicalSubject
@@ -41,6 +42,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Ensure CORS headers on 500 responses (browsers block cross-origin errors without them)
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "*",
+    "Access-Control-Allow-Headers": "*",
+}
+
+
+@app.exception_handler(Exception)
+async def add_cors_to_exceptions(request, exc):
+    # Re-raise HTTPException (4xx) so FastAPI handles it with proper status
+    if isinstance(exc, HTTPException):
+        raise exc
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+        headers=CORS_HEADERS,
+    )
+
 
 SIGN_FULL = {
     "Ari": "Aries", "Tau": "Taurus", "Gem": "Gemini", "Can": "Cancer",
@@ -446,80 +467,94 @@ def build_chart(
 
 
 # GeoNames base URLs (requires GEONAMES_USERNAME env var)
-GEONAMES_SEARCH = "https://api.geonames.org/searchJSON"
-GEONAMES_TIMEZONE = "https://api.geonames.org/timezoneJSON"
+# Use secure.geonames.org for HTTPS (api.geonames.org is HTTP by default)
+GEONAMES_SEARCH = "https://secure.geonames.org/searchJSON"
+GEONAMES_TIMEZONE = "https://secure.geonames.org/timezoneJSON"
 _timezone_cache: dict[tuple[float, float], str] = {}
 
 
 async def _search_locations(q: str, limit: int) -> list[LocationResult]:
     """
     Search GeoNames for places, fetch timezone per result.
-    Requires GEONAMES_USERNAME env var.
+    Requires GEONAMES_USERNAME env var. Returns [] on any failure (no 500).
     """
-    username = os.environ.get("GEONAMES_USERNAME")
-    if not username:
-        return []
-    q = (q or "").strip()
-    if not q or len(q) < 2:
-        return []
-    limit = min(max(1, limit), 10)
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        r = await client.get(
-            GEONAMES_SEARCH,
-            params={
-                "q": q,
-                "maxRows": limit,
-                "username": username,
-                "featureClass": "P",  # populated places
-            },
-        )
-        r.raise_for_status()
-        data = r.json()
-    geonames = data.get("geonames") or []
-    results: list[LocationResult] = []
-    for g in geonames:
-        name = g.get("name") or g.get("toponymName") or ""
-        country_code = g.get("countryCode") or ""
-        admin_code = g.get("adminCode1") or ""
-        admin_name = g.get("adminName1") or ""
-        country_name = g.get("countryName") or ""
-        lat = float(g.get("lat", 0))
-        lng = float(g.get("lng", 0))
-        if not name or not country_code:
-            continue
-        cache_key = (round(lat, 4), round(lng, 4))
-        tz_str = _timezone_cache.get(cache_key)
-        if tz_str is None:
-            try:
-                async with httpx.AsyncClient(timeout=5.0) as client:
-                    tz_r = await client.get(
-                        GEONAMES_TIMEZONE,
-                        params={"lat": lat, "lng": lng, "username": username},
-                    )
-                    tz_r.raise_for_status()
-                    tz_data = tz_r.json()
-                    tz_str = tz_data.get("timezoneId") or tz_data.get("timezone") or "UTC"
-            except Exception:
-                tz_str = "UTC"
-            _timezone_cache[cache_key] = tz_str
-        city = f"{name},{admin_code}" if admin_code else name
-        parts = [name]
-        if admin_name:
-            parts.append(admin_name)
-        if country_name:
-            parts.append(country_name)
-        display = ", ".join(parts)
-        results.append(
-            LocationResult(
-                display=display,
-                city=city,
-                nation=country_code,
-                timezone=tz_str,
-                lat=lat,
-                lng=lng,
+    try:
+        username = os.environ.get("GEONAMES_USERNAME")
+        if not username:
+            return []
+        q = (q or "").strip()
+        if not q or len(q) < 2:
+            return []
+        limit = min(max(1, limit), 10)
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(
+                GEONAMES_SEARCH,
+                params={
+                    "q": q,
+                    "maxRows": limit,
+                    "username": username,
+                    "featureClass": "P",  # populated places
+                },
             )
-        )
-    return results
+            r.raise_for_status()
+            data = r.json()
+        if not isinstance(data, dict):
+            return []
+        # GeoNames returns {"status": {"message": "...", "value": N}} on error (rate limit, etc)
+        if data.get("status") and data["status"].get("value") not in (None, 0):
+            return []
+        geonames = data.get("geonames") or []
+        results: list[LocationResult] = []
+        for g in geonames:
+            try:
+                if not isinstance(g, dict):
+                    continue
+                name = g.get("name") or g.get("toponymName") or ""
+                country_code = g.get("countryCode") or ""
+                admin_code = g.get("adminCode1") or ""
+                admin_name = g.get("adminName1") or ""
+                country_name = g.get("countryName") or ""
+                lat = float(g.get("lat", 0))
+                lng = float(g.get("lng", 0))
+                if not name or not country_code:
+                    continue
+                cache_key = (round(lat, 4), round(lng, 4))
+                tz_str = _timezone_cache.get(cache_key)
+                if tz_str is None:
+                    try:
+                        async with httpx.AsyncClient(timeout=5.0) as tz_client:
+                            tz_r = await tz_client.get(
+                                GEONAMES_TIMEZONE,
+                                params={"lat": lat, "lng": lng, "username": username},
+                            )
+                            tz_r.raise_for_status()
+                            tz_data = tz_r.json()
+                            tz_str = tz_data.get("timezoneId") or tz_data.get("timezone") or "UTC"
+                    except Exception:
+                        tz_str = "UTC"
+                    _timezone_cache[cache_key] = tz_str
+                city = f"{name},{admin_code}" if admin_code else name
+                parts = [name]
+                if admin_name:
+                    parts.append(admin_name)
+                if country_name:
+                    parts.append(country_name)
+                display = ", ".join(parts)
+                results.append(
+                    LocationResult(
+                        display=display,
+                        city=city,
+                        nation=country_code,
+                        timezone=tz_str,
+                        lat=lat,
+                        lng=lng,
+                    )
+                )
+            except (ValueError, TypeError, KeyError):
+                continue
+        return results
+    except Exception:
+        return []
 
 
 async def _enrich_with_interpretations(
