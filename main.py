@@ -240,7 +240,6 @@ class HouseInterpretation(BaseModel):
 
 class ChartInterpretations(BaseModel):
     planet_in_sign: dict[str, str] = {}
-    aspects: dict[str, str] = {}  # legacy keyed format
     big_three: BigThree = Field(default_factory=BigThree)
     house_interpretation: HouseInterpretation = Field(default_factory=HouseInterpretation)
     rising_sign_interpretation: Optional[str] = None  # SignHouseInterpretation for house 1 + rising
@@ -488,9 +487,7 @@ async def _enrich_with_interpretations(
     for key in planet_in_sign:
         sources[key] = "database"
     planet_in_house = dict(interp.get("planet_in_house", {}))  # used for per_house only
-    aspects = dict(interp.get("aspects", {}))
-    for key in aspects:
-        sources[key] = "database"
+    aspects = dict(interp.get("aspects", {}))  # used for chart.aspects[].interpretation only
 
     # Merge built-in defaults for Sun, Moon, Rising (always include when missing)
     for key, text in get_default_planet_in_sign(
@@ -507,11 +504,10 @@ async def _enrich_with_interpretations(
     for key, text in get_default_aspects(aspect_keys).items():
         if key not in aspects:
             aspects[key] = text
-            sources[key] = "default"
 
-    # Placeholder keys: planet_in_sign and aspects only (planet_in_house lives in per_house)
+    # Placeholder keys: planet_in_sign only (aspects/is_placeholder per chart.aspects[], planet_in_house in per_house)
     placeholder_keys: list[str] = []
-    for key, text in {**planet_in_sign, **aspects}.items():
+    for key, text in planet_in_sign.items():
         if is_placeholder_text(text):
             placeholder_keys.append(key)
 
@@ -522,7 +518,7 @@ async def _enrich_with_interpretations(
         a.type = detail.get("type")
         interp_text = detail.get("interpretation") or aspects.get(key)
         a.interpretation = interp_text
-        a.source = sources.get(key)
+        a.source = "database" if key in interp.get("aspects", {}) else ("default" if key in aspects else None)
         a.is_placeholder = is_placeholder_text(interp_text) if interp_text else False
 
     bt = interp.get("big_three", {})
@@ -593,7 +589,6 @@ async def _enrich_with_interpretations(
 
     chart.interpretations = ChartInterpretations(
         planet_in_sign=planet_in_sign,
-        aspects=aspects,
         big_three=big_three,
         house_interpretation=house_interpretation,
         rising_sign_interpretation=interp.get("rising_sign_interpretation"),
