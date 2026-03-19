@@ -37,6 +37,23 @@ from .models import (
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "new"
 
+# Embedded fallback when CSV is missing (e.g. path issues in container)
+# From Astro Data - signs.csv: descriptor, beneficial, unbeneficial, aspiration
+SIGNS_FALLBACK: list[dict] = [
+    {"name": "Aries", "element": "fire", "modality": "cardinal", "descriptor": "courageous / headstrong", "beneficial": "confidence, courage, pioneer spirit", "unbeneficial": "impulsiveness, impatience, unreliability", "aspiration": "control"},
+    {"name": "Taurus", "element": "earth", "modality": "fixed", "descriptor": "dependable / materialistic", "beneficial": "strong, nourishing, creative", "unbeneficial": "possessive, stubborn, self-indulgent", "aspiration": "obedience"},
+    {"name": "Gemini", "element": "air", "modality": "mutable", "descriptor": "intelligent / unreliable", "beneficial": "intelligent, communicating, curious", "unbeneficial": "restless, gossiping, neurotic", "aspiration": "wisdom"},
+    {"name": "Cancer", "element": "water", "modality": "cardinal", "descriptor": "sensitive / moody", "beneficial": "reassurance, nurture, possibilities", "unbeneficial": "insecurity, nurture, possibilities", "aspiration": "harmony"},
+    {"name": "Leo", "element": "fire", "modality": "fixed", "descriptor": "expressive / egoic", "beneficial": "generoity, energy, confidence", "unbeneficial": "egoism, conceit, ingratitude", "aspiration": "gratitude"},
+    {"name": "Virgo", "element": "earth", "modality": "mutable", "descriptor": "thoughtful / judgmental", "beneficial": "perfection, duty, purity", "unbeneficial": "anxiety, criticism, disorganization", "aspiration": "divine justice"},
+    {"name": "Libra", "element": "air", "modality": "cardinal", "descriptor": "romantic / indecisive", "beneficial": "harmonious, considerate, honest", "unbeneficial": "complacent, inactive, unadventurous", "aspiration": "reality"},
+    {"name": "Scorpio", "element": "water", "modality": "fixed", "descriptor": "passionate / destructive", "beneficial": "passionate, perceptive, fearless", "unbeneficial": "possessive, resentful, vindictive", "aspiration": "vision"},
+    {"name": "Sagittarius", "element": "fire", "modality": "mutable", "descriptor": "inspiring / restless", "beneficial": "visionary, active, generous", "unbeneficial": "overburdened, impatient, undiscriminating", "aspiration": "victory"},
+    {"name": "Capricorn", "element": "earth", "modality": "cardinal", "descriptor": "diligent / repressive", "beneficial": "practical, responsible, loyal", "unbeneficial": "controlling, overcautious, inflexible", "aspiration": "power"},
+    {"name": "Aquarius", "element": "air", "modality": "fixed", "descriptor": "original / shocking", "beneficial": "humane, loving, innovating", "unbeneficial": "intransigetn, self-righteous, arrogant", "aspiration": "love"},
+    {"name": "Pisces", "element": "water", "modality": "mutable", "descriptor": "imaginative / spacey", "beneficial": "sensitive, compassionate, adaptable", "unbeneficial": "vague, burdened, vulnerable", "aspiration": "mastery"},
+]
+
 
 def _csv_path(name: str) -> Path:
     return DATA_DIR / f"Astro Data - {name}.csv"
@@ -44,12 +61,13 @@ def _csv_path(name: str) -> Path:
 
 def _read_csv(path: Path) -> list[dict]:
     if not path.exists():
+        print(f"[seed_from_csv] CSV not found: {path}")
         return []
     rows = []
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8-sig") as f:  # utf-8-sig handles BOM
         reader = csv.DictReader(f)
         for row in reader:
-            rows.append({k.strip(): v.strip() if isinstance(v, str) else v for k, v in row.items()})
+            rows.append({k.strip(): (v.strip() if isinstance(v, str) else v) for k, v in row.items()})
     return rows
 
 
@@ -104,8 +122,13 @@ async def load_from_csv(session: AsyncSession, *, overwrite: bool = False) -> No
                 p.keywords = row.get("keywords").strip() or p.keywords
             session.add(p)
 
-    # 2. Update Signs from Astro Data - signs.csv
-    for row in _read_csv(_csv_path("signs.csv")):
+    # 2. Update Signs from Astro Data - signs.csv (fallback to embedded data if CSV empty)
+    signs_path = _csv_path("signs.csv")
+    signs_rows = _read_csv(signs_path)
+    if not signs_rows:
+        print(f"[seed_from_csv] signs: CSV empty/missing, using embedded fallback")
+        signs_rows = SIGNS_FALLBACK
+    for row in signs_rows:
         name = (row.get("Signs") or row.get("signs") or row.get("name") or "").strip()
         if not name:
             continue
