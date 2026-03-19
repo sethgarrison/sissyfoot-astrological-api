@@ -43,9 +43,6 @@ def _data_dir() -> Path:
     fallback = Path.cwd() / "data" / "new"
     return fallback if fallback.exists() else p
 
-
-DATA_DIR = _data_dir()
-
 # Embedded fallback when CSV is missing (e.g. path issues in container)
 # From Astro Data - signs.csv: descriptor, beneficial, unbeneficial, aspiration
 SIGNS_FALLBACK: list[dict] = [
@@ -66,7 +63,7 @@ SIGNS_FALLBACK: list[dict] = [
 
 def _csv_path(name: str) -> Path:
     base = name.removesuffix(".csv") if name.endswith(".csv") else name
-    return DATA_DIR / f"Astro Data - {base}.csv"
+    return _data_dir() / f"Astro Data - {base}.csv"
 
 
 def _read_csv(path: Path) -> list[dict]:
@@ -101,10 +98,12 @@ def _should_update_field(existing_val, new_val: str | None, overwrite: bool) -> 
 
 async def load_from_csv(session: AsyncSession, *, overwrite: bool = False) -> None:
     """Load interpretation data from data/new/ CSVs."""
-    if not DATA_DIR.exists():
-        print(f"Data directory not found: {DATA_DIR}")
+    data_dir = _data_dir()
+    if not data_dir.exists():
+        print(f"Data directory not found: {data_dir}")
         print("Create data/new/ and add your 'Astro Data - *.csv' files.")
         return
+    print(f"[seed_from_csv] Using data dir: {data_dir}")
 
     # Build lookup maps (reference tables must already exist from database.seed)
     planet_rows = (await session.execute(select(Planet))).scalars().all()
@@ -133,10 +132,12 @@ async def load_from_csv(session: AsyncSession, *, overwrite: bool = False) -> No
             session.add(p)
 
     # 2. Update Signs from Astro Data - signs.csv (fallback to embedded data if CSV empty)
-    signs_path = _csv_path("signs.csv")
+    signs_path = _csv_path("signs")
     signs_rows = _read_csv(signs_path)
     if not signs_rows:
-        print(f"[seed_from_csv] signs: CSV empty/missing, using embedded fallback")
+        files_in_dir = list(signs_path.parent.iterdir()) if signs_path.parent.exists() else []
+        sign_files = [f.name for f in files_in_dir if "sign" in f.name.lower()]
+        print(f"[seed_from_csv] signs: path={signs_path} exists={signs_path.exists()}, sign-related files={sign_files}, using embedded fallback")
         signs_rows = SIGNS_FALLBACK
     for row in signs_rows:
         name = (row.get("Signs") or row.get("signs") or row.get("name") or "").strip()
