@@ -65,7 +65,8 @@ SIGNS_FALLBACK: list[dict] = [
 
 
 def _csv_path(name: str) -> Path:
-    return DATA_DIR / f"Astro Data - {name}.csv"
+    base = name.removesuffix(".csv") if name.endswith(".csv") else name
+    return DATA_DIR / f"Astro Data - {base}.csv"
 
 
 def _read_csv(path: Path) -> list[dict]:
