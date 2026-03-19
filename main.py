@@ -9,10 +9,28 @@ from kerykeion import AstrologicalSubject
 from kerykeion.aspects import AspectsFactory
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from database.connection import get_db, init_db
-from database.models import Reading
+from database.models import (
+    Reading,
+    Planet,
+    Sign,
+    House,
+    Aspect,
+    PlanetSignInterpretation,
+    PlanetHouseInterpretation,
+    SunSignInterpretation,
+    MoonSignInterpretation,
+    AscendantSignInterpretation,
+    AspectTypeInterpretation,
+    AspectInterpretation,
+    PlanetAspectInterpretation,
+    SignHouseInterpretation,
+    ChartShapeInterpretation,
+    ChartDistributionInterpretation,
+    ModalityElementDistributionInterpretation,
+)
 from interpretations.chart_shapes import detect_chart_shape, detect_distributions
 from interpretations.modality_element import detect_modality_element_keys
 from interpretations.defaults import (
@@ -912,3 +930,64 @@ async def get_reading(
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/debug/interpretations", summary="Debug: interpretation table row counts and sample lookups")
+async def debug_interpretations(session: AsyncSession = Depends(get_db)):
+    """
+    Returns row counts for all interpretation tables and a sample lookup check.
+    Use to verify seed data is present and lookups would hit DB vs defaults.
+    """
+    async def count(model):
+        r = await session.execute(select(func.count()).select_from(model))
+        return r.scalar() or 0
+
+    counts = {
+        "reference": {
+            "planets": await count(Planet),
+            "signs": await count(Sign),
+            "houses": await count(House),
+            "aspects": await count(Aspect),
+        },
+        "interpretations": {
+            "planet_sign": await count(PlanetSignInterpretation),
+            "planet_house": await count(PlanetHouseInterpretation),
+            "sun_sign_big_three": await count(SunSignInterpretation),
+            "moon_sign_big_three": await count(MoonSignInterpretation),
+            "ascendant_sign_big_three": await count(AscendantSignInterpretation),
+            "aspect_type": await count(AspectTypeInterpretation),
+            "aspect_generic": await count(AspectInterpretation),
+            "planet_aspect": await count(PlanetAspectInterpretation),
+            "sign_house": await count(SignHouseInterpretation),
+            "chart_shape": await count(ChartShapeInterpretation),
+            "chart_distribution": await count(ChartDistributionInterpretation),
+            "modality_element": await count(ModalityElementDistributionInterpretation),
+        },
+    }
+
+    # Sample lookups: would "Sun in Aries" come from DB or defaults?
+    sample_checks = {}
+    sun_id = (await session.execute(select(Planet.id).where(Planet.name == "Sun"))).scalar_one_or_none()
+    aries_id = (await session.execute(select(Sign.id).where(Sign.name == "Aries"))).scalar_one_or_none()
+    if sun_id and aries_id:
+        r = await session.execute(
+            select(PlanetSignInterpretation.interpretation_text).where(
+                PlanetSignInterpretation.planet_id == sun_id,
+                PlanetSignInterpretation.sign_id == aries_id,
+            )
+        )
+        row = r.one_or_none()
+        sample_checks["Sun in Aries"] = {
+            "in_db": row is not None,
+            "is_placeholder": is_placeholder_text(row[0]) if row else None,
+            "preview": (row[0][:80] + "…") if row and len(row[0]) > 80 else (row[0] if row else None),
+        }
+
+    # Count planet_sign rows that are placeholders vs real content
+    all_psi = (await session.execute(select(PlanetSignInterpretation.interpretation_text))).scalars().all()
+    placeholder_count = sum(1 for (t,) in all_psi if is_placeholder_text(t or ""))
+    sample_checks["planet_sign_placeholder_count"] = placeholder_count
+    sample_checks["planet_sign_total"] = len(all_psi)
+    sample_checks["planet_sign_with_real_content"] = len(all_psi) - placeholder_count
+
+    return {"counts": counts, "sample_checks": sample_checks}

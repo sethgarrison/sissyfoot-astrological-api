@@ -14,6 +14,7 @@ Returns planetary positions, house cusps, aspects, lunar phase, the big three (s
 | GET    | `/readings`        | List all saved readings              |
 | GET    | `/readings/{id}`   | Fetch a saved reading by identifier  |
 | GET    | `/health`          | Health check                        |
+| GET    | `/debug/interpretations` | Debug: interpretation table row counts and sample lookups |
 | GET    | `/docs`            | Interactive Swagger UI              |
 
 ### Query parameters / body fields
