@@ -88,13 +88,14 @@ The chart response includes an `interpretations` object with planet-in-sign, pla
 
 - **Local:** Without `DATABASE_URL`, the app uses SQLite (`natal_chart.db`) in the project directory.
 
-- **Seeding:** Run explicitly when needed (e.g., after a fresh deploy or model change):
+- **Seeding:** Runs automatically on deploy via `start.sh` (`database.seed` + `database.seed_from_csv`). For local dev or manual runs:
 
   ```bash
   python -m database.seed
+  python -m database.seed_from_csv
   ```
 
-  On Render, use the **Shell** tab for your service (or a one-off job) to run this against the Postgres database.
+  `seed` creates reference tables and placeholder rows; `seed_from_csv` loads real interpretations from `data/new/*.csv`. Both are idempotent and preserve existing content.
 
 **The database is the source of truth.** Edit interpretations directly in the DB — no CSV bulk updates. See **[docs/EDITING_DATABASE.md](docs/EDITING_DATABASE.md)** for SQLite/PostgreSQL commands, lookup IDs, and example `UPDATE`/`INSERT` statements.
 
