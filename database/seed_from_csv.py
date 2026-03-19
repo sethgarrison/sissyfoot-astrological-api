@@ -35,7 +35,16 @@ from .models import (
     AspectTypeInterpretation,
 )
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "new"
+def _data_dir() -> Path:
+    """Resolve data/new path; try __file__-based first, then cwd (for container edge cases)."""
+    p = Path(__file__).resolve().parent.parent / "data" / "new"
+    if p.exists():
+        return p
+    fallback = Path.cwd() / "data" / "new"
+    return fallback if fallback.exists() else p
+
+
+DATA_DIR = _data_dir()
 
 # Embedded fallback when CSV is missing (e.g. path issues in container)
 # From Astro Data - signs.csv: descriptor, beneficial, unbeneficial, aspiration
