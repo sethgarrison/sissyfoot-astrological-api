@@ -96,23 +96,42 @@ async def load_from_csv(session: AsyncSession, *, overwrite: bool = False) -> No
             continue
         p = planet_by_name.get(name.lower())
         if p:
-            p.description = row.get("description") or p.description
-            p.keywords = row.get("keywords") or p.keywords
+            if row.get("symbol"):
+                p.symbol = row.get("symbol").strip() or p.symbol
+            if row.get("description"):
+                p.description = row.get("description").strip() or p.description
+            if row.get("keywords"):
+                p.keywords = row.get("keywords").strip() or p.keywords
             session.add(p)
 
-    # 2. Update Signs from Astro Data - signs.csv (column "Signs" = name)
+    # 2. Update Signs from Astro Data - signs.csv
     for row in _read_csv(_csv_path("signs.csv")):
         name = (row.get("Signs") or row.get("signs") or row.get("name") or "").strip()
         if not name:
             continue
         s = sign_by_name.get(name.lower())
         if s:
-            s.archetypes_balanced = row.get("archetypes_balanced") or s.archetypes_balanced
-            s.archetypes_unbalanced = row.get("archetypes_unbalanced") or s.archetypes_unbalanced
-            s.journey = row.get("journey") or s.journey
-            s.gifts = row.get("gifts") or s.gifts
-            s.challenges = row.get("challenges") or s.challenges
-            s.interpretation = row.get("interpretation") or s.interpretation
+            if row.get("element"):
+                s.element = row.get("element").strip() or s.element
+            if row.get("modality"):
+                s.modality = row.get("modality").strip() or s.modality
+            # Support both old and new CSV column names
+            val = (row.get("archetypes_balanced") or row.get("beneficial") or "").strip()
+            if val:
+                s.archetypes_balanced = val
+            val = (row.get("archetypes_unbalanced") or row.get("unbeneficial") or "").strip()
+            if val:
+                s.archetypes_unbalanced = val
+            val = (row.get("journey") or row.get("aspiration") or "").strip()
+            if val:
+                s.journey = val
+            if row.get("gifts"):
+                s.gifts = row.get("gifts").strip()
+            if row.get("challenges"):
+                s.challenges = row.get("challenges").strip()
+            val = (row.get("interpretation") or row.get("descriptor") or row.get("phrase") or "").strip()
+            if val:
+                s.interpretation = val
             session.add(s)
 
     # 3. Update Houses from Astro Data - houses.csv
@@ -123,20 +142,32 @@ async def load_from_csv(session: AsyncSession, *, overwrite: bool = False) -> No
             continue
         h = house_by_num.get(num)
         if h:
-            h.description = row.get("description") or h.description
-            h.subtitle = row.get("subtitle") or h.subtitle
-            h.keywords = row.get("keywords") or h.keywords
+            if row.get("type_"):
+                h.type_ = row.get("type_").strip() or h.type_
+            if row.get("description"):
+                h.description = row.get("description").strip() or h.description
+            if row.get("subtitle"):
+                h.subtitle = row.get("subtitle").strip() or h.subtitle
+            if row.get("keywords"):
+                h.keywords = row.get("keywords").strip() or h.keywords
             session.add(h)
 
-    # 3b. Update Aspects from aspects.csv (type column: conjunction, stressful, easy-flowing)
+    # 3b. Update Aspects from aspects.csv (type: conjunction, stressful, easy-flowing)
     for row in _read_csv(_csv_path("aspects.csv")):
         name = (row.get("name") or "").strip()
-        type_val = (row.get("type") or "").strip()
         if not name:
             continue
         a = aspect_by_name.get(name.lower())
-        if a and type_val:
-            a.type_ = type_val
+        if a:
+            if row.get("angle_degrees") is not None:
+                try:
+                    a.angle_degrees = int(row.get("angle_degrees"))
+                except (ValueError, TypeError):
+                    pass
+            if row.get("symbol"):
+                a.symbol = row.get("symbol").strip() or a.symbol
+            if row.get("type"):
+                a.type_ = row.get("type").strip() or a.type_
             session.add(a)
 
     # 3c. Sun sign interpretations (Big Three) from sun.csv
