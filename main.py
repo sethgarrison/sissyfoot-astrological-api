@@ -40,6 +40,7 @@ from interpretations.defaults import (
 )
 from interpretations.data_quality import is_placeholder_text
 from interpretations.lookup import fetch_interpretations
+from routers.data import router as data_router
 
 
 async def lifespan(app: FastAPI):
@@ -53,6 +54,8 @@ app = FastAPI(
     description="Generate natal (birth) charts powered by the Swiss Ephemeris via Kerykeion.",
     version="1.0.0",
 )
+
+app.include_router(data_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -984,10 +987,27 @@ async def debug_interpretations(session: AsyncSession = Depends(get_db)):
         }
 
     # Count planet_sign rows that are placeholders vs real content
+    # scalars().all() returns list of strings, not Rows
     all_psi = (await session.execute(select(PlanetSignInterpretation.interpretation_text))).scalars().all()
-    placeholder_count = sum(1 for row in all_psi if is_placeholder_text((row[0] or "") if row else ""))
+    placeholder_count = sum(1 for t in all_psi if is_placeholder_text(t or ""))
     sample_checks["planet_sign_placeholder_count"] = placeholder_count
     sample_checks["planet_sign_total"] = len(all_psi)
     sample_checks["planet_sign_with_real_content"] = len(all_psi) - placeholder_count
 
-    return {"counts": counts, "sample_checks": sample_checks}
+    # Summary of likely gaps (for debugging)
+    interp = counts["interpretations"]
+    gaps = []
+    if interp["sun_sign_big_three"] == 0:
+        gaps.append("Big Three (sun): sun.csv not loaded or seed_from_csv failed")
+    if interp["moon_sign_big_three"] == 0:
+        gaps.append("Big Three (moon): moon.csv not loaded or seed_from_csv failed")
+    if interp["ascendant_sign_big_three"] == 0:
+        gaps.append("Big Three (ascendant): ascendent.csv not loaded or seed_from_csv failed")
+    if interp["sign_house"] == 0:
+        gaps.append("Sign-house: sign_house_interpretations.csv not loaded")
+    if interp["planet_aspect"] == 0:
+        gaps.append("Planet-aspect: aspect_interpretations.csv has no planet-pair rows")
+    if placeholder_count > 0:
+        gaps.append(f"planet_sign: {placeholder_count} rows still placeholders (Sun/Moon/Chiron missing from planet_sign_interpretations.csv)")
+
+    return {"counts": counts, "sample_checks": sample_checks, "likely_gaps": gaps}

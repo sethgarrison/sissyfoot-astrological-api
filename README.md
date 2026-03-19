@@ -13,8 +13,24 @@ Returns planetary positions, house cusps, aspects, lunar phase, the big three (s
 | POST   | `/chart`           | Generate a natal chart (saves to DB)|
 | GET    | `/readings`        | List all saved readings              |
 | GET    | `/readings/{id}`   | Fetch a saved reading by identifier  |
+| GET    | `/data/planets`    | Raw planets table                    |
+| GET    | `/data/signs`      | Raw signs table                      |
+| GET    | `/data/houses`     | Raw houses table                     |
+| GET    | `/data/aspects`    | Raw aspects table                    |
+| GET    | `/data/sun`        | **Big Three:** Sun in sign interpretations |
+| GET    | `/data/moon`       | **Big Three:** Moon in sign interpretations |
+| GET    | `/data/ascendant`  | **Big Three:** Ascendant/Rising in sign interpretations |
+| GET    | `/data/planet-sign` | Planet in sign interpretations       |
+| GET    | `/data/planet-house` | Planet in house interpretations     |
+| GET    | `/data/aspect-type` | Aspect type interpretations (conjunction, stressful, easy-flowing) |
+| GET    | `/data/aspect-generic` | Generic aspect interpretations   |
+| GET    | `/data/planet-aspect` | Planet-pair aspect interpretations |
+| GET    | `/data/sign-house` | Sign on house cusp interpretations   |
+| GET    | `/data/chart-shape` | Chart shape interpretations         |
+| GET    | `/data/chart-distribution` | Hemisphere/quadrant interpretations |
+| GET    | `/data/modality-element` | Modality/element distribution interpretations |
 | GET    | `/health`          | Health check                        |
-| GET    | `/debug/interpretations` | Debug: interpretation table row counts and sample lookups |
+| GET    | `/debug/interpretations` | Debug: interpretation table row counts |
 | GET    | `/docs`            | Interactive Swagger UI              |
 
 ### Query parameters / body fields
