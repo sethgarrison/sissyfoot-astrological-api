@@ -103,7 +103,13 @@ async def load_from_csv(session: AsyncSession, *, overwrite: bool = False) -> No
         print(f"Data directory not found: {data_dir}")
         print("Create data/new/ and add your 'Astro Data - *.csv' files.")
         return
-    print(f"[seed_from_csv] Using data dir: {data_dir}")
+    # Verify CSVs are present and readable
+    planets_path = _csv_path("planets")
+    planets_rows = _read_csv(planets_path)
+    signs_path = _csv_path("signs")
+    signs_rows = _read_csv(signs_path)
+    all_files = list(data_dir.iterdir()) if data_dir.exists() else []
+    print(f"[seed_from_csv] data_dir={data_dir} files={len(all_files)} planets_rows={len(planets_rows)} signs_rows={len(signs_rows)} planets_exists={planets_path.exists()} signs_exists={signs_path.exists()}")
 
     # Build lookup maps (reference tables must already exist from database.seed)
     planet_rows = (await session.execute(select(Planet))).scalars().all()
@@ -117,7 +123,7 @@ async def load_from_csv(session: AsyncSession, *, overwrite: bool = False) -> No
     aspect_by_name = {a.name.lower(): a for a in aspect_rows}
 
     # 1. Update Planets from Astro Data - planets.csv
-    for row in _read_csv(_csv_path("planets.csv")):
+    for row in planets_rows:
         name = row.get("name", "").strip()
         if not name:
             continue
@@ -132,8 +138,6 @@ async def load_from_csv(session: AsyncSession, *, overwrite: bool = False) -> No
             session.add(p)
 
     # 2. Update Signs from Astro Data - signs.csv (fallback to embedded data if CSV empty)
-    signs_path = _csv_path("signs")
-    signs_rows = _read_csv(signs_path)
     if not signs_rows:
         files_in_dir = list(signs_path.parent.iterdir()) if signs_path.parent.exists() else []
         sign_files = [f.name for f in files_in_dir if "sign" in f.name.lower()]
@@ -520,6 +524,11 @@ async def load_from_csv(session: AsyncSession, *, overwrite: bool = False) -> No
             )
 
     await session.commit()
+
+    # Verify data persisted
+    aries = (await session.execute(select(Sign).where(Sign.name == "Aries"))).scalar_one_or_none()
+    sun = (await session.execute(select(Planet).where(Planet.name == "Sun"))).scalar_one_or_none()
+    print(f"[seed_from_csv] post-commit: Aries.interpretation={bool(aries and aries.interpretation)} Sun.symbol={bool(sun and sun.symbol)}")
     print("Seed from CSV complete.")
 
 
