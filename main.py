@@ -985,7 +985,7 @@ async def debug_interpretations(session: AsyncSession = Depends(get_db)):
 
     # Count planet_sign rows that are placeholders vs real content
     all_psi = (await session.execute(select(PlanetSignInterpretation.interpretation_text))).scalars().all()
-    placeholder_count = sum(1 for (t,) in all_psi if is_placeholder_text(t or ""))
+    placeholder_count = sum(1 for row in all_psi if is_placeholder_text((row[0] or "") if row else ""))
     sample_checks["planet_sign_placeholder_count"] = placeholder_count
     sample_checks["planet_sign_total"] = len(all_psi)
     sample_checks["planet_sign_with_real_content"] = len(all_psi) - placeholder_count
