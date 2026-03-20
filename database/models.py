@@ -18,15 +18,16 @@ class Planet(Base):
 
 
 class Sign(Base):
+    """Zodiac signs. Sun-in-sign (Big Three) fields merged: archetypes_balanced, journey, etc."""
     __tablename__ = "signs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(50), unique=True, nullable=False)
     element = Column(String(20), nullable=True)  # fire, earth, air, water
     modality = Column(String(20), nullable=True)  # cardinal, fixed, mutable
-    archetypes_balanced = Column(String(200), nullable=True)
-    archetypes_unbalanced = Column(String(200), nullable=True)
-    journey = Column(String(100), nullable=True)
+    archetypes_balanced = Column(String(500), nullable=True)  # Sun-in-sign + general
+    archetypes_unbalanced = Column(String(500), nullable=True)
+    journey = Column(String(200), nullable=True)
     gifts = Column(Text, nullable=True)
     challenges = Column(Text, nullable=True)
     interpretation = Column(Text, nullable=True)
@@ -51,21 +52,6 @@ class Aspect(Base):
     angle_degrees = Column(Integer, nullable=True)
     symbol = Column(String(10), nullable=True)
     type_ = Column(String(30), nullable=True)  # conjunction, stressful, easy-flowing
-
-
-class SunSignInterpretation(Base):
-    """Sun in sign: Big Three. Keyed by sign. From Astro Data - sun.csv."""
-    __tablename__ = "sun_sign_interpretations"
-    __table_args__ = (UniqueConstraint("sign_id", name="uq_sun_sign"),)
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    sign_id = Column(Integer, ForeignKey("signs.id"), nullable=False)
-    archetypes_balanced = Column(String(500), nullable=True)
-    archetypes_unbalanced = Column(String(500), nullable=True)
-    journey = Column(String(200), nullable=True)
-    gifts = Column(Text, nullable=True)
-    challenges = Column(Text, nullable=True)
-    interpretation = Column(Text, nullable=True)
 
 
 class MoonSignInterpretation(Base):

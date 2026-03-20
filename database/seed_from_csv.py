@@ -29,7 +29,6 @@ from .models import (
     ChartDistributionInterpretation,
     SignHouseInterpretation,
     PlanetAspectInterpretation,
-    SunSignInterpretation,
     MoonSignInterpretation,
     AscendantSignInterpretation,
     AspectTypeInterpretation,
@@ -208,36 +207,19 @@ async def load_from_csv(session: AsyncSession, *, overwrite: bool = False) -> No
                 a.type_ = row.get("type").strip() or a.type_
             session.add(a)
 
-    # 3c. Sun sign interpretations (Big Three) from sun.csv
+    # 3c. Sun-in-sign (Big Three) merged into signs from sun.csv
     for row in _read_csv(_csv_path("sun.csv")):
         name = (row.get("Signs") or row.get("signs") or row.get("name") or "").strip()
         if not name:
             continue
-        sid = sign_by_name.get(name.lower())
-        if not sid:
+        s = sign_by_name.get(name.lower())
+        if not s:
             continue
-        existing = (
-            await session.execute(
-                select(SunSignInterpretation).where(
-                    SunSignInterpretation.sign_id == sid.id,
-                )
-            )
-        ).scalar_one_or_none()
-        data = {
-            "archetypes_balanced": (row.get("archetypes_balanced") or "").strip() or None,
-            "archetypes_unbalanced": (row.get("archetypes_unbalanced") or "").strip() or None,
-            "journey": (row.get("journey") or "").strip() or None,
-            "gifts": (row.get("gifts") or "").strip() or None,
-            "challenges": (row.get("challenges") or "").strip() or None,
-            "interpretation": (row.get("interpretation") or "").strip() or None,
-        }
-        if existing:
-            for k, v in data.items():
-                if v is not None and _should_update_field(getattr(existing, k, None), v, overwrite):
-                    setattr(existing, k, v)
-            session.add(existing)
-        else:
-            session.add(SunSignInterpretation(sign_id=sid.id, **data))
+        for field in ("archetypes_balanced", "archetypes_unbalanced", "journey", "gifts", "challenges", "interpretation"):
+            val = (row.get(field) or "").strip() or None
+            if val and _should_update_field(getattr(s, field, None), val, overwrite):
+                setattr(s, field, val)
+        session.add(s)
 
     # 3d. Moon sign interpretations (Big Three) from moon.csv
     for row in _read_csv(_csv_path("moon.csv")):

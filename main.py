@@ -20,7 +20,6 @@ from database.models import (
     Aspect,
     PlanetSignInterpretation,
     PlanetHouseInterpretation,
-    SunSignInterpretation,
     MoonSignInterpretation,
     AscendantSignInterpretation,
     AspectTypeInterpretation,
@@ -955,7 +954,7 @@ async def debug_interpretations(session: AsyncSession = Depends(get_db)):
         "interpretations": {
             "planet_sign": await count(PlanetSignInterpretation),
             "planet_house": await count(PlanetHouseInterpretation),
-            "sun_sign_big_three": await count(SunSignInterpretation),
+            "sun_in_signs": len((await session.execute(select(Sign).where(Sign.archetypes_balanced.isnot(None)))).scalars().all()),
             "moon_sign_big_three": await count(MoonSignInterpretation),
             "ascendant_sign_big_three": await count(AscendantSignInterpretation),
             "aspect_type": await count(AspectTypeInterpretation),
@@ -997,8 +996,8 @@ async def debug_interpretations(session: AsyncSession = Depends(get_db)):
     # Summary of likely gaps (for debugging)
     interp = counts["interpretations"]
     gaps = []
-    if interp["sun_sign_big_three"] == 0:
-        gaps.append("Big Three (sun): sun.csv not loaded or seed_from_csv failed")
+    if interp.get("sun_in_signs", 0) == 0:
+        gaps.append("Big Three (sun): sun.csv not loaded into signs or seed_from_csv failed")
     if interp["moon_sign_big_three"] == 0:
         gaps.append("Big Three (moon): moon.csv not loaded or seed_from_csv failed")
     if interp["ascendant_sign_big_three"] == 0:

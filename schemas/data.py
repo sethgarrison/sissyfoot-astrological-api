@@ -40,16 +40,7 @@ class AspectUpdate(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-# --- Big Three ---
-
-class SunSignInterpretationUpdate(BaseModel):
-    archetypes_balanced: Optional[str] = None
-    archetypes_unbalanced: Optional[str] = None
-    journey: Optional[str] = None
-    gifts: Optional[str] = None
-    challenges: Optional[str] = None
-    interpretation: Optional[str] = None
-
+# --- Big Three (Sun merged into signs; Moon/Ascendant separate) ---
 
 class MoonSignInterpretationUpdate(BaseModel):
     nature: Optional[str] = None

@@ -8,7 +8,6 @@ from database.models import (
     Sign,
     House,
     Aspect,
-    SunSignInterpretation,
     MoonSignInterpretation,
     AscendantSignInterpretation,
     AspectTypeInterpretation,
@@ -246,28 +245,19 @@ async def fetch_interpretations(
         if text:
             result["modality_element_distribution"][key] = text
 
-    # Big Three: sun, moon, ascendant from dedicated tables
+    # Big Three: sun from signs (merged), moon/ascendant from dedicated tables
     if sun_sign:
-        sid = sign_by_name.get(sun_sign)
-        if sid:
-            r = await session.execute(
-                select(SunSignInterpretation).where(
-                    SunSignInterpretation.sign_id == sid
-                )
-            )
-            sun_row = r.scalar_one_or_none()
-            if sun_row:
-                sign_obj = sign_by_name_obj.get(sun_sign)
-                result["big_three"]["sun"] = {
-                    "sign": sun_sign,
-                    "archetypes_balanced": sun_row.archetypes_balanced,
-                    "archetypes_unbalanced": sun_row.archetypes_unbalanced,
-                    "journey": sun_row.journey,
-                    "gifts": sun_row.gifts,
-                    "challenges": sun_row.challenges,
-                    "interpretation": sun_row.interpretation,
-                    "sign_interpretation": sign_obj.interpretation if sign_obj else None,
-                }
+        sign_obj = sign_by_name_obj.get(sun_sign)
+        if sign_obj:
+            result["big_three"]["sun"] = {
+                "sign": sun_sign,
+                "archetypes_balanced": sign_obj.archetypes_balanced,
+                "archetypes_unbalanced": sign_obj.archetypes_unbalanced,
+                "journey": sign_obj.journey,
+                "gifts": sign_obj.gifts,
+                "challenges": sign_obj.challenges,
+                "interpretation": sign_obj.interpretation,
+            }
     if moon_sign:
         sid = sign_by_name.get(moon_sign)
         if sid:

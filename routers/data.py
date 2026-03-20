@@ -12,7 +12,6 @@ from database.models import (
     Sign,
     House,
     Aspect,
-    SunSignInterpretation,
     MoonSignInterpretation,
     AscendantSignInterpretation,
     PlanetSignInterpretation,
@@ -30,7 +29,6 @@ from schemas.data import (
     SignUpdate,
     HouseUpdate,
     AspectUpdate,
-    SunSignInterpretationUpdate,
     MoonSignInterpretationUpdate,
     AscendantSignInterpretationUpdate,
     PlanetSignInterpretationUpdate,
@@ -148,47 +146,7 @@ async def patch_aspect(id: int, body: AspectUpdate, session: AsyncSession = Depe
     return {"id": row.id, "name": row.name, "angle_degrees": row.angle_degrees, "symbol": row.symbol, "type": row.type_}
 
 
-# --- Big Three: single source of truth for Sun/Moon/Rising interpretations ---
-
-@router.get("/sun")
-async def get_sun_interpretations(session: AsyncSession = Depends(get_db)):
-    """Sun in sign interpretations (Big Three). One row per sign. Source: sun.csv."""
-    rows = (
-        await session.execute(
-            select(SunSignInterpretation, Sign.name.label("sign_name"))
-            .join(Sign, SunSignInterpretation.sign_id == Sign.id)
-            .order_by(Sign.id)
-        )
-    ).fetchall()
-    return [
-        {
-            "id": (s := r[0]).id,
-            "sign": r[1],
-            "sign_id": s.sign_id,
-            "archetypes_balanced": s.archetypes_balanced,
-            "archetypes_unbalanced": s.archetypes_unbalanced,
-            "journey": s.journey,
-            "gifts": s.gifts,
-            "challenges": s.challenges,
-            "interpretation": s.interpretation,
-        }
-        for r in rows
-    ]
-
-
-@router.patch("/sun/{id}")
-async def patch_sun_interpretation(id: int, body: SunSignInterpretationUpdate, session: AsyncSession = Depends(get_db)):
-    """Update a Sun sign interpretation by id."""
-    row = (await session.execute(select(SunSignInterpretation).where(SunSignInterpretation.id == id))).scalar_one_or_none()
-    if not row:
-        raise HTTPException(404, "Sun sign interpretation not found")
-    _apply_update(row, body)
-    session.add(row)
-    await session.commit()
-    await session.refresh(row)
-    sign_name = (await session.execute(select(Sign.name).where(Sign.id == row.sign_id))).scalar_one()
-    return {"id": row.id, "sign": sign_name, "sign_id": row.sign_id, "archetypes_balanced": row.archetypes_balanced, "archetypes_unbalanced": row.archetypes_unbalanced, "journey": row.journey, "gifts": row.gifts, "challenges": row.challenges, "interpretation": row.interpretation}
-
+# --- Big Three: Moon and Ascendant from dedicated tables; Sun from signs (merged) ---
 
 @router.get("/moon")
 async def get_moon_interpretations(session: AsyncSession = Depends(get_db)):

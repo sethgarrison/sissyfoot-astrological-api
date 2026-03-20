@@ -73,28 +73,7 @@ export interface AspectUpdate {
   type?: string | null;
 }
 
-// --- Big Three: Sun / Moon / Ascendant in sign ---
-
-export interface SunSignInterpretation {
-  id: number;
-  sign: string;
-  sign_id: number;
-  archetypes_balanced: string | null;
-  archetypes_unbalanced: string | null;
-  journey: string | null;
-  gifts: string | null;
-  challenges: string | null;
-  interpretation: string | null;
-}
-
-export interface SunSignInterpretationUpdate {
-  archetypes_balanced?: string | null;
-  archetypes_unbalanced?: string | null;
-  journey?: string | null;
-  gifts?: string | null;
-  challenges?: string | null;
-  interpretation?: string | null;
-}
+// --- Big Three: Sun merged into signs; Moon/Ascendant in dedicated tables ---
 
 export interface MoonSignInterpretation {
   id: number;
@@ -245,10 +224,9 @@ export interface ModalityElementDistributionInterpretationUpdate {
 
 export const DATA_ENDPOINTS = {
   planets: "/data/planets",
-  signs: "/data/signs",
+  signs: "/data/signs",  // Sun-in-sign (Big Three) fields: archetypes_balanced, journey, etc.
   houses: "/data/houses",
   aspects: "/data/aspects",
-  sun: "/data/sun",
   moon: "/data/moon",
   ascendant: "/data/ascendant",
   planetSign: "/data/planet-sign",

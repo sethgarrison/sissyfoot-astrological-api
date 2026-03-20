@@ -15,14 +15,12 @@ Returns planetary positions, house cusps, aspects, lunar phase, the big three (s
 | GET    | `/readings/{id}`   | Fetch a saved reading by identifier  |
 | GET    | `/data/planets`    | Raw planets table                    |
 | PATCH  | `/data/planets/{id}` | Update planet by id                 |
-| GET    | `/data/signs`      | Raw signs table                      |
+| GET    | `/data/signs`      | Raw signs table (includes Sun-in-sign Big Three fields) |
 | PATCH  | `/data/signs/{id}` | Update sign by id                   |
 | GET    | `/data/houses`     | Raw houses table                     |
 | PATCH  | `/data/houses/{id}` | Update house by id                  |
 | GET    | `/data/aspects`    | Raw aspects table                    |
 | PATCH  | `/data/aspects/{id}` | Update aspect by id                 |
-| GET    | `/data/sun`        | **Big Three:** Sun in sign interpretations |
-| PATCH  | `/data/sun/{id}`   | Update Sun sign interpretation       |
 | GET    | `/data/moon`       | **Big Three:** Moon in sign interpretations |
 | PATCH  | `/data/moon/{id}`  | Update Moon sign interpretation      |
 | GET    | `/data/ascendant`  | **Big Three:** Ascendant/Rising in sign interpretations |
@@ -131,6 +129,8 @@ The chart response includes an `interpretations` object with planet-in-sign, pla
   `seed` creates reference tables and placeholder rows; `seed_from_csv` loads real interpretations from `data/new/*.csv`. Both are idempotent and preserve existing content.
 
 **The database is the source of truth.** Edit interpretations directly in the DB — no CSV bulk updates. See **[docs/EDITING_DATABASE.md](docs/EDITING_DATABASE.md)** for SQLite/PostgreSQL commands, lookup IDs, and example `UPDATE`/`INSERT` statements.
+
+**Sun merged into signs:** Sun-in-sign (Big Three) data lives in the `signs` table. The `sun_sign_interpretations` table is deprecated. For existing DBs that have it, run `python -m scripts.merge_sun_into_signs` once to copy data into signs, then `python -m scripts.drop_sun_sign_interpretations` to drop the old table.
 
 ### Export interpretations to CSV
 
