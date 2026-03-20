@@ -14,21 +14,37 @@ Returns planetary positions, house cusps, aspects, lunar phase, the big three (s
 | GET    | `/readings`        | List all saved readings              |
 | GET    | `/readings/{id}`   | Fetch a saved reading by identifier  |
 | GET    | `/data/planets`    | Raw planets table                    |
+| PATCH  | `/data/planets/{id}` | Update planet by id                 |
 | GET    | `/data/signs`      | Raw signs table                      |
+| PATCH  | `/data/signs/{id}` | Update sign by id                   |
 | GET    | `/data/houses`     | Raw houses table                     |
+| PATCH  | `/data/houses/{id}` | Update house by id                  |
 | GET    | `/data/aspects`    | Raw aspects table                    |
+| PATCH  | `/data/aspects/{id}` | Update aspect by id                 |
 | GET    | `/data/sun`        | **Big Three:** Sun in sign interpretations |
+| PATCH  | `/data/sun/{id}`   | Update Sun sign interpretation       |
 | GET    | `/data/moon`       | **Big Three:** Moon in sign interpretations |
+| PATCH  | `/data/moon/{id}`  | Update Moon sign interpretation      |
 | GET    | `/data/ascendant`  | **Big Three:** Ascendant/Rising in sign interpretations |
+| PATCH  | `/data/ascendant/{id}` | Update Ascendant sign interpretation |
 | GET    | `/data/planet-sign` | Planet in sign interpretations       |
+| PATCH  | `/data/planet-sign/{id}` | Update planet-sign interpretation |
 | GET    | `/data/planet-house` | Planet in house interpretations     |
+| PATCH  | `/data/planet-house/{id}` | Update planet-house interpretation |
 | GET    | `/data/aspect-type` | Aspect type interpretations (conjunction, stressful, easy-flowing) |
+| PATCH  | `/data/aspect-type/{id}` | Update aspect type interpretation |
 | GET    | `/data/aspect-generic` | Generic aspect interpretations   |
+| PATCH  | `/data/aspect-generic/{id}` | Update generic aspect interpretation |
 | GET    | `/data/planet-aspect` | Planet-pair aspect interpretations |
+| PATCH  | `/data/planet-aspect/{id}` | Update planet-aspect interpretation |
 | GET    | `/data/sign-house` | Sign on house cusp interpretations   |
+| PATCH  | `/data/sign-house/{id}` | Update sign-house interpretation |
 | GET    | `/data/chart-shape` | Chart shape interpretations         |
+| PATCH  | `/data/chart-shape/{id}` | Update chart shape interpretation |
 | GET    | `/data/chart-distribution` | Hemisphere/quadrant interpretations |
+| PATCH  | `/data/chart-distribution/{id}` | Update chart distribution interpretation |
 | GET    | `/data/modality-element` | Modality/element distribution interpretations |
+| PATCH  | `/data/modality-element/{id}` | Update modality-element interpretation |
 | GET    | `/health`          | Health check                        |
 | GET    | `/debug/interpretations` | Debug: interpretation table row counts |
 | GET    | `/docs`            | Interactive Swagger UI              |
