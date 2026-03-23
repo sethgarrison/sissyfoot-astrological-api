@@ -84,6 +84,7 @@ async def get_signs(session: AsyncSession = Depends(get_db)):
             "id": r.id, "name": r.name, "element": r.element, "modality": r.modality,
             "archetypes_balanced": r.archetypes_balanced, "archetypes_unbalanced": r.archetypes_unbalanced,
             "journey": r.journey, "gifts": r.gifts, "challenges": r.challenges, "interpretation": r.interpretation,
+            "adverb": r.adverb,
         }
         for r in rows
     ]
@@ -103,6 +104,7 @@ async def patch_sign(id: int, body: SignUpdate, session: AsyncSession = Depends(
         "id": row.id, "name": row.name, "element": row.element, "modality": row.modality,
         "archetypes_balanced": row.archetypes_balanced, "archetypes_unbalanced": row.archetypes_unbalanced,
         "journey": row.journey, "gifts": row.gifts, "challenges": row.challenges, "interpretation": row.interpretation,
+        "adverb": row.adverb,
     }
 
 
@@ -130,7 +132,17 @@ async def patch_house(id: int, body: HouseUpdate, session: AsyncSession = Depend
 async def get_aspects(session: AsyncSession = Depends(get_db)):
     """All aspect types (Conjunction, Opposition, etc.)."""
     rows = (await session.execute(select(Aspect))).scalars().all()
-    return [{"id": r.id, "name": r.name, "angle_degrees": r.angle_degrees, "symbol": r.symbol, "type": r.type_} for r in rows]
+    return [
+        {
+            "id": r.id,
+            "name": r.name,
+            "angle_degrees": r.angle_degrees,
+            "symbol": r.symbol,
+            "type": r.type_,
+            "summary_keyphrase": r.summary_keyphrase,
+        }
+        for r in rows
+    ]
 
 
 @router.patch("/aspects/{id}")
@@ -143,7 +155,14 @@ async def patch_aspect(id: int, body: AspectUpdate, session: AsyncSession = Depe
     session.add(row)
     await session.commit()
     await session.refresh(row)
-    return {"id": row.id, "name": row.name, "angle_degrees": row.angle_degrees, "symbol": row.symbol, "type": row.type_}
+    return {
+        "id": row.id,
+        "name": row.name,
+        "angle_degrees": row.angle_degrees,
+        "symbol": row.symbol,
+        "type": row.type_,
+        "summary_keyphrase": row.summary_keyphrase,
+    }
 
 
 # --- Big Three: Moon and Ascendant from dedicated tables; Sun from signs (merged) ---

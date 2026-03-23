@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Placeholder detection and interpretation source metadata.
 Used to identify whether interpretation data came from DB vs defaults,

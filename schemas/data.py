@@ -21,6 +21,7 @@ class SignUpdate(BaseModel):
     gifts: Optional[str] = None
     challenges: Optional[str] = None
     interpretation: Optional[str] = None
+    adverb: Optional[str] = None  # interpretations_summary short line (sign modifier)
 
 
 class HouseUpdate(BaseModel):
@@ -36,6 +37,7 @@ class AspectUpdate(BaseModel):
     angle_degrees: Optional[int] = None
     symbol: Optional[str] = None
     type_: Optional[str] = Field(None, alias="type")
+    summary_keyphrase: Optional[str] = None  # short phrase for interpretations_summary aspects
 
     model_config = {"populate_by_name": True}
 

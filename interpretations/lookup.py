@@ -1,7 +1,15 @@
 """Fetch interpretations from the database."""
+from __future__ import annotations
+
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from interpretations.lexicons import (
+    DEFAULT_ASPECT_KEYPHRASES_NORM,
+    DEFAULT_SIGN_ADVERBS,
+    normalize_aspect_name_for_lexicon,
+)
 
 from database.models import (
     Planet,
@@ -295,3 +303,39 @@ async def fetch_interpretations(
                 }
 
     return result
+
+
+async def fetch_chart_lexicon_data(
+    session: AsyncSession,
+) -> tuple[dict[str, str | None], dict[int, str | None], dict[str, str], dict[str, str]]:
+    """
+    Load planet/house keywords plus merged sign adverbs and aspect summary keyphrases.
+
+    Returns:
+        planet_name -> keywords,
+        house_number -> keywords,
+        sign_name -> adverb (DB overrides defaults),
+        normalized_aspect_name -> keyphrase (empty string allowed = suppress phrase; DB NULL keeps default).
+    """
+    planet_rows = (await session.execute(select(Planet))).scalars().all()
+    house_rows = (await session.execute(select(House))).scalars().all()
+    sign_rows = (await session.execute(select(Sign))).scalars().all()
+    aspect_rows = (await session.execute(select(Aspect))).scalars().all()
+
+    planet_map = {p.name: p.keywords for p in planet_rows}
+    house_map = {h.number: h.keywords for h in house_rows}
+
+    sign_adverbs = dict(DEFAULT_SIGN_ADVERBS)
+    for s in sign_rows:
+        if s.adverb is not None:
+            sign_adverbs[s.name] = str(s.adverb).strip()
+
+    aspect_by_norm = dict(DEFAULT_ASPECT_KEYPHRASES_NORM)
+    for a in aspect_rows:
+        norm = normalize_aspect_name_for_lexicon(a.name)
+        if norm == "conjunction":
+            continue
+        if a.summary_keyphrase is not None:
+            aspect_by_norm[norm] = (a.summary_keyphrase or "").strip()
+
+    return planet_map, house_map, sign_adverbs, aspect_by_norm

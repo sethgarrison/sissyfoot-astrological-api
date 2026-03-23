@@ -34,9 +34,14 @@ async def export_all():
         # Reference tables
         for model, path_name, cols, order_col in [
             (Planet, "planets", ["id", "name", "symbol"], Planet.name),
-            (Sign, "signs", ["id", "name", "element", "modality"], Sign.name),
+            (Sign, "signs", ["id", "name", "element", "modality", "adverb"], Sign.name),
             (House, "houses", ["id", "number", "type_"], House.number),
-            (Aspect, "aspects", ["id", "name", "angle_degrees", "symbol"], Aspect.name),
+            (
+                Aspect,
+                "aspects",
+                ["id", "name", "angle_degrees", "symbol", "type_", "summary_keyphrase"],
+                Aspect.name,
+            ),
         ]:
             rows = (await session.execute(select(model).order_by(order_col))).scalars().all()
             path = OUTPUT_DIR / f"{path_name}.csv"

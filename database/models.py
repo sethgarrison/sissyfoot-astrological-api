@@ -31,6 +31,7 @@ class Sign(Base):
     gifts = Column(Text, nullable=True)
     challenges = Column(Text, nullable=True)
     interpretation = Column(Text, nullable=True)
+    adverb = Column(String(100), nullable=True)  # interpretations_summary sign adverb (editable via /data/signs)
 
 
 class House(Base):
@@ -52,6 +53,7 @@ class Aspect(Base):
     angle_degrees = Column(Integer, nullable=True)
     symbol = Column(String(10), nullable=True)
     type_ = Column(String(30), nullable=True)  # conjunction, stressful, easy-flowing
+    summary_keyphrase = Column(String(255), nullable=True)  # short phrase for interpretations_summary (null = use default; Conjunction typically null)
 
 
 class MoonSignInterpretation(Base):

@@ -1,7 +1,7 @@
-id,name,angle_degrees,symbol,type
-1,Conjunction,0,☌,conjunction
-2,Opposition,180,☍,stressful
-6,Quincunx,150,⚻,stressful
-5,Sextile,60,⚹,easy-flowing
-3,Square,90,□,stressful
-4,Trine,120,△,easy-flowing
+id,name,angle_degrees,symbol,type,summary_keyphrase
+1,Conjunction,0,☌,conjunction,
+2,Opposition,180,☍,stressful,faces and challenges
+6,Quincunx,150,⚻,stressful,interacts awkwardly with
+5,Sextile,60,⚹,easy-flowing,combines pleasantly with
+3,Square,90,□,stressful,interacts stressfully with
+4,Trine,120,△,easy-flowing,combines very easily with

@@ -16,6 +16,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from interpretations.data_quality import is_placeholder_text
+from interpretations.lexicons import (
+    DEFAULT_ASPECT_KEYPHRASES_NORM,
+    DEFAULT_SIGN_ADVERBS,
+    normalize_aspect_name_for_lexicon,
+)
 
 from .connection import AsyncSessionLocal, init_db
 from .models import (
@@ -169,7 +174,17 @@ async def load_from_csv(session: AsyncSession, *, overwrite: bool = False) -> No
             val = (row.get("interpretation") or row.get("descriptor") or row.get("phrase") or "").strip()
             if val:
                 s.interpretation = val
+            adv = (row.get("adverb") or "").strip()
+            if adv:
+                s.adverb = adv
             session.add(s)
+
+    for s in sign_by_name.values():
+        if not (s.adverb and str(s.adverb).strip()):
+            default_adv = DEFAULT_SIGN_ADVERBS.get(s.name)
+            if default_adv:
+                s.adverb = default_adv
+                session.add(s)
 
     # 3. Update Houses from Astro Data - houses.csv
     for row in _read_csv(_csv_path("houses.csv")):
@@ -205,7 +220,21 @@ async def load_from_csv(session: AsyncSession, *, overwrite: bool = False) -> No
                 a.symbol = row.get("symbol").strip() or a.symbol
             if row.get("type"):
                 a.type_ = row.get("type").strip() or a.type_
+            sk = (row.get("summary_keyphrase") or "").strip()
+            if sk:
+                a.summary_keyphrase = sk
             session.add(a)
+
+    for a in aspect_rows:
+        norm = normalize_aspect_name_for_lexicon(a.name)
+        if norm == "conjunction":
+            continue
+        cur = a.summary_keyphrase
+        if cur is None or (isinstance(cur, str) and not cur.strip()):
+            default_p = DEFAULT_ASPECT_KEYPHRASES_NORM.get(norm)
+            if default_p:
+                a.summary_keyphrase = default_p
+                session.add(a)
 
     # 3c. Sun-in-sign (Big Three) merged into signs from sun.csv
     for row in _read_csv(_csv_path("sun.csv")):

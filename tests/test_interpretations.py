@@ -46,6 +46,45 @@ async def test_chart_returns_interpretation_structure():
 
 
 @pytest.mark.asyncio
+async def test_interpretations_summary_structure():
+    """interpretations_summary: house_groups, chart_context, big_three."""
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        r = await client.get("/chart", params=CHART_PARAMS)
+        assert r.status_code == 200
+        data = r.json()
+
+    summary = data.get("interpretations_summary", {})
+    assert "house_groups" in summary
+    assert "chart_context" in summary
+    assert "big_three" in summary
+
+    ctx = summary["chart_context"]
+    assert "shape" in ctx
+    assert "concentration" in ctx
+    assert "modality_element" in ctx
+    assert "key" in ctx["shape"] or ctx["shape"].get("key") is None
+
+    for hg in summary["house_groups"]:
+        assert "house" in hg
+        assert "house_keyword" in hg
+        assert "sign_on_cusp" in hg
+        assert "placements" in hg
+        for pl in hg["placements"]:
+            assert "body" in pl
+            assert "sign" in pl
+            assert "sign_adverb" in pl
+            assert "synthesis" in pl
+            assert "aspects" in pl
+            for asp in pl["aspects"]:
+                assert "aspect" in asp
+                assert "other_body" in asp
+                assert "synthesis" in asp
+
+
+@pytest.mark.asyncio
 async def test_interpretations_have_source_and_placeholder_metadata():
     """Client can identify data source and placeholders via sources and placeholder_keys."""
     async with AsyncClient(

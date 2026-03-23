@@ -38,8 +38,11 @@ from interpretations.defaults import (
     get_default_aspects,
 )
 from interpretations.data_quality import is_placeholder_text
-from interpretations.lookup import fetch_interpretations
+from interpretations.lexicons import DEFAULT_ASPECT_KEYPHRASES_NORM, DEFAULT_SIGN_ADVERBS
+from interpretations.lookup import fetch_interpretations, fetch_chart_lexicon_data
+from interpretations.summary import build_interpretations_summary
 from routers.data import router as data_router
+from schemas.interpretations_summary import InterpretationsSummary
 
 
 async def lifespan(app: FastAPI):
@@ -312,6 +315,7 @@ class NatalChart(BaseModel):
     )
     aspects: list[AspectInfo]
     interpretations: ChartInterpretations = ChartInterpretations()
+    interpretations_summary: InterpretationsSummary = Field(default_factory=InterpretationsSummary)
     reading_id: Optional[str] = None  # Use this to fetch via GET /readings/{reading_id}
 
 
@@ -483,6 +487,7 @@ def build_chart(
         houses_overview=_compute_sign_placement_overview(planets),
         aspects=aspects,
         interpretations=ChartInterpretations(),
+        interpretations_summary=InterpretationsSummary(),
     )
 
 
@@ -746,6 +751,29 @@ async def _enrich_with_interpretations(
         retrograde_interpretations=interp.get("retrograde_interpretations", {}),
         sources=sources,
         placeholder_keys=placeholder_keys,
+    )
+    try:
+        planet_kw, house_kw, sign_adv, asp_norm = await fetch_chart_lexicon_data(session)
+    except Exception:
+        planet_kw, house_kw = {}, {}
+        sign_adv = dict(DEFAULT_SIGN_ADVERBS)
+        asp_norm = dict(DEFAULT_ASPECT_KEYPHRASES_NORM)
+    cs = interp.get("chart_shape", {}) or {}
+    chart.interpretations_summary = build_interpretations_summary(
+        planets=chart.planets,
+        houses=chart.houses,
+        aspects=chart.aspects,
+        planet_in_sign=planet_in_sign,
+        planet_in_house=planet_in_house,
+        planet_keywords=planet_kw,
+        house_keywords=house_kw,
+        sign_adverbs=sign_adv,
+        aspect_keyphrase_by_norm=asp_norm,
+        chart_shape_primary=cs.get("primary"),
+        chart_shape_interpretation=cs.get("interpretation"),
+        distribution=cs.get("distribution") or {},
+        modality_element_distribution=interp.get("modality_element_distribution") or {},
+        big_three_dict=big_three.model_dump(),
     )
     return chart
 

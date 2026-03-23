@@ -30,6 +30,7 @@ export interface Sign {
   gifts: string | null;
   challenges: string | null;
   interpretation: string | null;
+  adverb: string | null; // interpretations_summary sign modifier
 }
 
 export interface SignUpdate {
@@ -41,6 +42,7 @@ export interface SignUpdate {
   gifts?: string | null;
   challenges?: string | null;
   interpretation?: string | null;
+  adverb?: string | null;
 }
 
 export interface House {
@@ -65,12 +67,14 @@ export interface Aspect {
   angle_degrees: number | null;
   symbol: string | null;
   type: string | null; // conjunction, stressful, easy-flowing
+  summary_keyphrase: string | null; // short phrase for interpretations_summary
 }
 
 export interface AspectUpdate {
   angle_degrees?: number | null;
   symbol?: string | null;
   type?: string | null;
+  summary_keyphrase?: string | null;
 }
 
 // --- Big Three: Sun merged into signs; Moon/Ascendant in dedicated tables ---
@@ -218,6 +222,61 @@ export interface ModalityElementDistributionInterpretation {
 
 export interface ModalityElementDistributionInterpretationUpdate {
   interpretation_text?: string | null;
+}
+
+// --- GET /chart — interpretations_summary (additive) ---
+
+export interface PlacementLongTexts {
+  in_sign?: string | null;
+  in_house?: string | null;
+}
+
+export interface SummaryAspectItem {
+  aspect: string;
+  aspect_type?: string | null;
+  aspect_keyphrase?: string | null;
+  other_body: string;
+  other_sign: string;
+  other_planet_keyword?: string | null;
+  other_sign_adverb?: string | null;
+  synthesis: string;
+  interpretation?: string | null;
+  is_placeholder?: boolean;
+}
+
+export interface SummaryPlacement {
+  body: string;
+  sign: string;
+  sign_adverb: string;
+  planet_keyword?: string | null;
+  synthesis: string;
+  retrograde?: boolean;
+  aspects: SummaryAspectItem[];
+  long?: PlacementLongTexts | null;
+}
+
+export interface HouseGroupSummary {
+  house: number;
+  house_keyword?: string | null;
+  sign_on_cusp: string;
+  placements: SummaryPlacement[];
+}
+
+export interface ChartShapeSummary {
+  key?: string | null;
+  interpretation?: string | null;
+}
+
+export interface ChartContextSummary {
+  shape: ChartShapeSummary;
+  concentration: Record<string, string>;
+  modality_element: Record<string, string>;
+}
+
+export interface InterpretationsSummary {
+  house_groups: HouseGroupSummary[];
+  chart_context: ChartContextSummary;
+  big_three: Record<string, unknown>;
 }
 
 // --- API path helpers ---
