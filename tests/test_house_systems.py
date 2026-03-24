@@ -3,7 +3,7 @@ Test Whole Sign vs Placidus house systems.
 Run: python -m pytest tests/test_house_systems.py -v
    or: python tests/test_house_systems.py
 """
-from main import build_chart
+from chart_pipeline import build_chart_core
 
 SIGN_ORDER = [
     "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
@@ -13,7 +13,7 @@ SIGN_ORDER = [
 
 def test_whole_sign_cusps_at_zero():
     """Whole Sign: every house cusp must be at 0° of its sign."""
-    chart = build_chart(
+    chart = build_chart_core(
         1990, 6, 15, 12, 0,
         lat=40.7128, lng=-74.006, tz_str="America/New_York",
         house_system="whole_sign",
@@ -25,7 +25,7 @@ def test_whole_sign_cusps_at_zero():
 
 def test_whole_sign_zodiac_order():
     """Whole Sign: houses follow zodiac order from rising sign."""
-    chart = build_chart(
+    chart = build_chart_core(
         1990, 6, 15, 12, 0,
         lat=40.7128, lng=-74.006, tz_str="America/New_York",
         house_system="whole_sign",
@@ -38,7 +38,7 @@ def test_whole_sign_zodiac_order():
 
 def test_placidus_cusps_vary():
     """Placidus: house cusps have varying degrees (not all 0°)."""
-    chart = build_chart(
+    chart = build_chart_core(
         1990, 6, 15, 12, 0,
         lat=40.7128, lng=-74.006, tz_str="America/New_York",
         house_system="placidus",
@@ -52,8 +52,8 @@ def test_placidus_cusps_vary():
 def test_house_systems_produce_different_placements():
     """WSH and Placidus can assign planets to different houses."""
     lat, lng, tz = 40.7128, -74.006, "America/New_York"
-    wsh = build_chart(1990, 6, 15, 12, 0, lat=lat, lng=lng, tz_str=tz, house_system="whole_sign")
-    plc = build_chart(1990, 6, 15, 12, 0, lat=lat, lng=lng, tz_str=tz, house_system="placidus")
+    wsh = build_chart_core(1990, 6, 15, 12, 0, lat=lat, lng=lng, tz_str=tz, house_system="whole_sign")
+    plc = build_chart_core(1990, 6, 15, 12, 0, lat=lat, lng=lng, tz_str=tz, house_system="placidus")
     wsh_houses = {p.name: p.house for p in wsh.planets}
     plc_houses = {p.name: p.house for p in plc.planets}
     assert wsh_houses != plc_houses, "WSH and Placidus should differ for at least one planet"
@@ -61,7 +61,7 @@ def test_house_systems_produce_different_placements():
 
 def test_default_is_whole_sign():
     """Default house system should be whole_sign."""
-    chart = build_chart(
+    chart = build_chart_core(
         1990, 6, 15, 12, 0,
         lat=40.7128, lng=-74.006, tz_str="America/New_York",
     )

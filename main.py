@@ -5,12 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import httpx
-from kerykeion import AstrologicalSubject
-from kerykeion.aspects import AspectsFactory
 from typing import Optional
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from chart_pipeline import build_chart_api_response, build_chart_core
 from database.connection import get_db, init_db
 from database.models import (
     Reading,
@@ -30,19 +29,9 @@ from database.models import (
     ChartDistributionInterpretation,
     ModalityElementDistributionInterpretation,
 )
-from interpretations.chart_shapes import detect_chart_shape, detect_distributions
-from interpretations.modality_element import detect_modality_element_keys
-from interpretations.defaults import (
-    get_default_planet_in_sign,
-    get_default_planet_in_house,
-    get_default_aspects,
-)
 from interpretations.data_quality import is_placeholder_text
-from interpretations.lexicons import DEFAULT_ASPECT_KEYPHRASES_NORM, DEFAULT_SIGN_ADVERBS
-from interpretations.lookup import fetch_interpretations, fetch_chart_lexicon_data
-from interpretations.summary import build_interpretations_summary
 from routers.data import router as data_router
-from schemas.interpretations_summary import InterpretationsSummary
+from schemas.chart_response import ChartAPIResponse
 
 
 async def lifespan(app: FastAPI):
@@ -86,237 +75,8 @@ async def add_cors_to_exceptions(request, exc):
     )
 
 
-SIGN_FULL = {
-    "Ari": "Aries", "Tau": "Taurus", "Gem": "Gemini", "Can": "Cancer",
-    "Leo": "Leo", "Vir": "Virgo", "Lib": "Libra", "Sco": "Scorpio",
-    "Sag": "Sagittarius", "Cap": "Capricorn", "Aqu": "Aquarius", "Pis": "Pisces",
-}
-
-# Sign → element (fire, earth, air, water) and quality/modality (cardinal, fixed, mutable)
-SIGN_TO_ELEMENT = {
-    "Aries": "fire", "Taurus": "earth", "Gemini": "air", "Cancer": "water",
-    "Leo": "fire", "Virgo": "earth", "Libra": "air", "Scorpio": "water",
-    "Sagittarius": "fire", "Capricorn": "earth", "Aquarius": "air", "Pisces": "water",
-}
-SIGN_TO_QUALITY = {
-    "Aries": "cardinal", "Taurus": "fixed", "Gemini": "mutable", "Cancer": "cardinal",
-    "Leo": "fixed", "Virgo": "mutable", "Libra": "cardinal", "Scorpio": "fixed",
-    "Sagittarius": "mutable", "Capricorn": "cardinal", "Aquarius": "fixed", "Pisces": "mutable",
-}
-
-HOUSE_NUM = {
-    "First_House": 1, "Second_House": 2, "Third_House": 3, "Fourth_House": 4,
-    "Fifth_House": 5, "Sixth_House": 6, "Seventh_House": 7, "Eighth_House": 8,
-    "Ninth_House": 9, "Tenth_House": 10, "Eleventh_House": 11, "Twelfth_House": 12,
-}
-
-HOUSE_ATTRS = [
-    "first_house", "second_house", "third_house", "fourth_house",
-    "fifth_house", "sixth_house", "seventh_house", "eighth_house",
-    "ninth_house", "tenth_house", "eleventh_house", "twelfth_house",
-]
-
-# House system: API value -> Kerykeion identifier (P=Placidus, W=Whole Sign)
-HOUSE_SYSTEMS = {"whole_sign": "W", "placidus": "P", "WSH": "W"}
+# House system default (must match chart_pipeline.DEFAULT_HOUSE_SYSTEM)
 DEFAULT_HOUSE_SYSTEM = "whole_sign"
-
-
-def _compute_sign_placement_overview(planets: list["PlanetPosition"]) -> "SignPlacementOverview":
-    """Compute sign distribution from planetary placements: which signs have planets, by quality and element."""
-    signs_with_planets: dict[str, list[str]] = {}
-    by_quality: dict[str, list[str]] = {"cardinal": [], "fixed": [], "mutable": []}  # signs per quality
-    by_element: dict[str, list[str]] = {"fire": [], "earth": [], "air": [], "water": []}  # signs per element
-    quality_planets: dict[str, list[str]] = {"cardinal": [], "fixed": [], "mutable": []}
-    element_planets: dict[str, list[str]] = {"fire": [], "earth": [], "air": [], "water": []}
-    for p in planets:
-        sign = p.sign
-        signs_with_planets.setdefault(sign, []).append(p.name)
-        q = SIGN_TO_QUALITY.get(sign)
-        if q:
-            if sign not in by_quality[q]:
-                by_quality[q].append(sign)
-            quality_planets[q].append(p.name)
-        e = SIGN_TO_ELEMENT.get(sign)
-        if e:
-            if sign not in by_element[e]:
-                by_element[e].append(sign)
-            element_planets[e].append(p.name)
-    return SignPlacementOverview(
-        signs_with_planets=signs_with_planets,
-        by_quality={
-            k: QualityDistribution(count=len(quality_planets[k]), signs=v, planets=quality_planets[k])
-            for k, v in by_quality.items()
-        },
-        by_element={
-            k: ElementDistribution(count=len(element_planets[k]), signs=v, planets=element_planets[k])
-            for k, v in by_element.items()
-        },
-    )
-
-
-class PlanetPosition(BaseModel):
-    name: str
-    sign: str
-    sign_num: int
-    degree: float
-    abs_degree: float
-    house: int
-    retrograde: bool
-    speed: Optional[float] = None
-
-
-class HouseCusp(BaseModel):
-    number: int
-    sign: str
-    degree: float
-    abs_degree: float
-
-
-class LunarNodePosition(BaseModel):
-    """North or South Lunar Node — modeled separately from planets (no aspects, no chart shape)."""
-    node: str  # "North Node" | "South Node"
-    sign: str
-    sign_num: int
-    degree: float
-    abs_degree: float
-    house: int
-
-
-class AspectInfo(BaseModel):
-    planet1: str
-    planet2: str
-    aspect: str
-    aspect_degrees: int
-    orbit: float
-    movement: Optional[str] = None
-    type: Optional[str] = None  # conjunction, stressful, easy-flowing
-    interpretation: Optional[str] = None
-    source: Optional[str] = None  # "database" | "default" — where interpretation came from
-    is_placeholder: bool = False  # true if content is a fill-in placeholder
-
-
-class LunarPhase(BaseModel):
-    degrees_between: float
-    phase_name: str
-    emoji: str
-
-
-class ChartShapeInfo(BaseModel):
-    primary: Optional[str] = None
-    interpretation: Optional[str] = None
-    distribution: dict[str, str] = {}
-
-
-class QualityDistribution(BaseModel):
-    """Count and list of signs/planets for a quality (cardinal, fixed, mutable)."""
-    count: int
-    signs: list[str] = []  # signs with planets in this quality
-    planets: list[str] = []  # planet names in signs of this quality
-
-
-class ElementDistribution(BaseModel):
-    """Count and list of signs/planets for an element (fire, earth, air, water)."""
-    count: int
-    signs: list[str] = []  # signs with planets in this element
-    planets: list[str] = []  # planet names in signs of this element
-
-
-class SignPlacementOverview(BaseModel):
-    """Overview of signs that have planets, with distributions by quality and element."""
-    signs_with_planets: dict[str, list[str]] = {}  # sign -> list of planet names
-    by_quality: dict[str, QualityDistribution] = {}  # cardinal, fixed, mutable
-    by_element: dict[str, ElementDistribution] = {}  # fire, earth, air, water
-
-
-class BigThreeSun(BaseModel):
-    sign: str
-    archetypes_balanced: Optional[str] = None
-    archetypes_unbalanced: Optional[str] = None
-    journey: Optional[str] = None
-    gifts: Optional[str] = None
-    challenges: Optional[str] = None
-    interpretation: Optional[str] = None
-    sign_interpretation: Optional[str] = None
-    source: Optional[str] = None  # "database" - only set when from DB
-    is_placeholder: bool = False  # true when content is a fill-in placeholder
-
-
-class BigThreeMoon(BaseModel):
-    sign: str
-    nature: Optional[str] = None
-    sources_of_contentment: Optional[str] = None
-    keywords: Optional[str] = None
-    interpretation: Optional[str] = None
-    source: Optional[str] = None  # "database"
-    is_placeholder: bool = False
-
-
-class BigThreeAscendant(BaseModel):
-    sign: str
-    impression: Optional[str] = None
-    appearance: Optional[str] = None
-    childhood: Optional[str] = None
-    balance: Optional[str] = None
-    interpretation: Optional[str] = None
-    source: Optional[str] = None  # "database"
-    is_placeholder: bool = False
-
-
-class BigThree(BaseModel):
-    sun: Optional[BigThreeSun] = None
-    moon: Optional[BigThreeMoon] = None
-    ascendant: Optional[BigThreeAscendant] = None
-
-
-class PerHouseInfo(BaseModel):
-    house: int
-    sign_on_cusp: str
-    planets: list[str] = []
-    planet_interpretations: dict[str, str] = {}  # "Planet in House N" -> text
-    sign_interpretation: Optional[str] = None
-
-
-class HouseInterpretation(BaseModel):
-    per_house: list[PerHouseInfo] = []
-    shape: ChartShapeInfo = ChartShapeInfo()
-    quadrant: dict[str, str] = {}  # quadrant_1, etc. -> interpretation
-    hemisphere: dict[str, str] = {}  # hemisphere_northern, etc. -> interpretation
-
-
-class ChartInterpretations(BaseModel):
-    planet_in_sign: dict[str, str] = {}
-    big_three: BigThree = Field(default_factory=BigThree)
-    house_interpretation: HouseInterpretation = Field(default_factory=HouseInterpretation)
-    rising_sign_interpretation: Optional[str] = None  # SignHouseInterpretation for house 1 + rising
-    chart_shape: ChartShapeInfo = ChartShapeInfo()
-    modality_element_distribution: dict[str, str] = {}  # e.g. element_fire_dominant -> interpretation
-    retrograde_planets: list[str] = []  # planet names that are retrograde in this chart
-    retrograde_interpretations: dict[str, str] = {}  # e.g. "Mercury in Gemini" -> retrograde meaning
-    sources: dict[str, str] = {}  # "Sun in Aries" -> "database"|"default" — client can identify gaps
-    placeholder_keys: list[str] = []  # keys where content is a fill-in placeholder
-
-
-class NatalChart(BaseModel):
-    name: Optional[str] = None
-    birth_datetime: str
-    latitude: float
-    longitude: float
-    house_system: str = "whole_sign"  # whole_sign (default) or placidus
-    sun_sign: str
-    moon_sign: str
-    rising_sign: str
-    lunar_phase: LunarPhase
-    planets: list[PlanetPosition]
-    lunar_nodes: list[LunarNodePosition] = []  # North & South Node (excluded from aspects & chart shape)
-    houses: list[HouseCusp]
-    houses_overview: SignPlacementOverview = Field(
-        default_factory=lambda: SignPlacementOverview(),
-        description="Overview of signs that have planets, with distributions by quality and element",
-    )
-    aspects: list[AspectInfo]
-    interpretations: ChartInterpretations = ChartInterpretations()
-    interpretations_summary: InterpretationsSummary = Field(default_factory=InterpretationsSummary)
-    reading_id: Optional[str] = None  # Use this to fetch via GET /readings/{reading_id}
 
 
 class LocationResult(BaseModel):
@@ -341,14 +101,6 @@ def _make_reading_identifier(name: str, birth_datetime: str, lat: float, lng: fl
     return f"{safe_name}{READING_ID_DELIM}{birth_datetime}{READING_ID_DELIM}{lat}{READING_ID_DELIM}{lng}"
 
 
-def _sign(abbr: str) -> str:
-    return SIGN_FULL.get(abbr, abbr)
-
-
-def _house_num(house_str: str) -> int:
-    return HOUSE_NUM.get(house_str, 0)
-
-
 def _parse_time(time_str: Optional[str]) -> Optional[tuple[int, int]]:
     """
     Parse time string into (hour, minute). Accepts:
@@ -370,125 +122,6 @@ def _parse_time(time_str: Optional[str]) -> Optional[tuple[int, int]]:
     except ValueError:
         pass
     return None
-
-
-def _planet(body) -> PlanetPosition:
-    return PlanetPosition(
-        name=body.name.replace("_", " "),
-        sign=_sign(body.sign),
-        sign_num=body.sign_num,
-        degree=round(body.position, 4),
-        abs_degree=round(body.abs_pos, 4),
-        house=_house_num(body.house),
-        retrograde=body.retrograde or False,
-        speed=round(body.speed, 6) if body.speed else None,
-    )
-
-
-def _lunar_node(body, label: str) -> LunarNodePosition:
-    return LunarNodePosition(
-        node=label,
-        sign=_sign(body.sign),
-        sign_num=body.sign_num,
-        degree=round(body.position, 4),
-        abs_degree=round(body.abs_pos, 4),
-        house=_house_num(body.house),
-    )
-
-
-NODE_NAMES = {"True_North_Lunar_Node", "True_South_Lunar_Node", "North_Node", "South_Node"}  # Kerykeion aspect names
-
-
-def build_chart(
-    year: int, month: int, day: int, hour: int, minute: int,
-    *,
-    city: Optional[str] = None,
-    nation: Optional[str] = None,
-    lat: Optional[float] = None,
-    lng: Optional[float] = None,
-    tz_str: Optional[str] = None,
-    name: str = "",
-    house_system: str = DEFAULT_HOUSE_SYSTEM,
-) -> NatalChart:
-    house_sys = HOUSE_SYSTEMS.get(house_system, HOUSE_SYSTEMS[DEFAULT_HOUSE_SYSTEM])
-    kwargs: dict = {"houses_system_identifier": house_sys}
-    if lat and lng and tz_str:
-        kwargs["online"] = False
-    subject = AstrologicalSubject(
-        name or "Subject", year, month, day, hour, minute,
-        city=city, nation=nation, lat=lat, lng=lng, tz_str=tz_str,
-        geonames_username=os.environ.get("GEONAMES_USERNAME"),
-        **kwargs,
-    )
-
-    bodies = [
-        subject.sun, subject.moon, subject.mercury, subject.venus,
-        subject.mars, subject.jupiter, subject.saturn, subject.uranus,
-        subject.neptune, subject.pluto, subject.chiron,
-    ]
-    planets = [_planet(b) for b in bodies]
-
-    lunar_nodes = []
-    north = getattr(subject, "true_north_lunar_node", None)
-    south = getattr(subject, "true_south_lunar_node", None)
-    if north is not None:
-        lunar_nodes.append(_lunar_node(north, "North Node"))
-    if south is not None:
-        lunar_nodes.append(_lunar_node(south, "South Node"))
-
-    houses = []
-    for i, attr in enumerate(HOUSE_ATTRS, start=1):
-        h = getattr(subject, attr)
-        houses.append(HouseCusp(
-            number=i,
-            sign=_sign(h.sign),
-            degree=round(h.position, 4),
-            abs_degree=round(h.abs_pos, 4),
-        ))
-
-    aspects = []
-    try:
-        asp_result = AspectsFactory.natal_aspects(subject._model)
-        for a in asp_result.aspects:
-            # Exclude aspects involving lunar nodes (they're not planets)
-            if a.p1_name in NODE_NAMES or a.p2_name in NODE_NAMES:
-                continue
-            aspects.append(AspectInfo(
-                planet1=a.p1_name.replace("_", " "),
-                planet2=a.p2_name.replace("_", " "),
-                aspect=a.aspect,
-                aspect_degrees=a.aspect_degrees,
-                orbit=round(a.orbit, 4),
-                movement=a.aspect_movement,
-            ))
-    except Exception:
-        pass
-
-    lp = subject._model.lunar_phase
-    lunar_phase = LunarPhase(
-        degrees_between=round(lp.degrees_between_s_m, 4),
-        phase_name=lp.moon_phase_name,
-        emoji=lp.moon_emoji,
-    )
-
-    return NatalChart(
-        name=name or None,
-        birth_datetime=f"{year}-{month:02d}-{day:02d}T{hour:02d}:{minute:02d}",
-        latitude=subject.lat,
-        longitude=subject.lng,
-        house_system=house_system,
-        sun_sign=_sign(subject.sun.sign),
-        moon_sign=_sign(subject.moon.sign),
-        rising_sign=_sign(subject.first_house.sign),
-        lunar_phase=lunar_phase,
-        planets=planets,
-        lunar_nodes=lunar_nodes,
-        houses=houses,
-        houses_overview=_compute_sign_placement_overview(planets),
-        aspects=aspects,
-        interpretations=ChartInterpretations(),
-        interpretations_summary=InterpretationsSummary(),
-    )
 
 
 # GeoNames base URLs (requires GEONAMES_USERNAME env var)
@@ -582,203 +215,7 @@ async def _search_locations(q: str, limit: int) -> list[LocationResult]:
         return []
 
 
-async def _enrich_with_interpretations(
-    chart: NatalChart, session: AsyncSession
-) -> NatalChart:
-    """Fetch interpretations from DB and attach to chart."""
-    planet_sign_pairs = [(p.name, p.sign) for p in chart.planets]
-    planet_house_pairs = [(p.name, p.house) for p in chart.planets]
-    aspect_keys = [f"{a.planet1} {a.aspect} {a.planet2}" for a in chart.aspects]
-    planet_dicts = [
-        {"name": p.name, "abs_degree": p.abs_degree, "house": p.house}
-        for p in chart.planets
-    ]
-    chart_shape = detect_chart_shape(planet_dicts)
-    distribution_keys = detect_distributions(planet_dicts)
-    by_quality = {k: v.count for k, v in chart.houses_overview.by_quality.items()}
-    by_element = {k: v.count for k, v in chart.houses_overview.by_element.items()}
-    modality_element_keys = detect_modality_element_keys(by_quality, by_element)
-    retrograde_planets = {p.name for p in chart.planets if p.retrograde}
-    try:
-        house_cusps = [(h.number, h.sign) for h in chart.houses]
-        interp = await fetch_interpretations(
-            session,
-            planet_sign_pairs=planet_sign_pairs,
-            planet_house_pairs=planet_house_pairs,
-            aspect_keys=aspect_keys,
-            chart_shape=chart_shape,
-            distribution_keys=distribution_keys,
-            modality_element_keys=modality_element_keys,
-            retrograde_planets=retrograde_planets,
-            rising_sign=chart.rising_sign,
-            sun_sign=chart.sun_sign,
-            moon_sign=chart.moon_sign,
-            house_cusps=house_cusps,
-        )
-        planet_in_sign = dict(interp["planet_in_sign"])
-    except Exception:
-        planet_in_sign = {}
-        interp = {
-            "planet_in_house": {},
-            "aspects": {},
-            "aspects_detail": {},
-            "big_three": {"sun": None, "moon": None, "ascendant": None},
-            "house_sign_interpretations": {},
-            "rising_sign_interpretation": None,
-            "chart_shape": {"primary": chart_shape, "interpretation": None, "distribution": {}},
-            "modality_element_distribution": {},
-            "retrograde_planets": sorted(retrograde_planets),
-            "retrograde_interpretations": {},
-        }
-
-    # Track source for each interpretation: "database" or "default"
-    sources: dict[str, str] = {}
-    for key in planet_in_sign:
-        sources[key] = "database"
-    planet_in_house = dict(interp.get("planet_in_house", {}))  # used for per_house only
-    aspects = dict(interp.get("aspects", {}))  # used for chart.aspects[].interpretation only
-
-    # Merge built-in defaults for Sun, Moon, Rising (always include when missing)
-    for key, text in get_default_planet_in_sign(
-        chart.sun_sign, chart.moon_sign, chart.rising_sign
-    ).items():
-        if key not in planet_in_sign:
-            planet_in_sign[key] = text
-            sources[key] = "default"
-
-    # Merge built-in defaults for planet-in-house (used for per_house only) and aspects
-    for key, text in get_default_planet_in_house(planet_house_pairs).items():
-        if key not in planet_in_house:
-            planet_in_house[key] = text
-    for key, text in get_default_aspects(aspect_keys).items():
-        if key not in aspects:
-            aspects[key] = text
-
-    # Placeholder keys: planet_in_sign only (aspects/is_placeholder per chart.aspects[], planet_in_house in per_house)
-    placeholder_keys: list[str] = []
-    for key, text in planet_in_sign.items():
-        if is_placeholder_text(text):
-            placeholder_keys.append(key)
-
-    aspects_detail = interp.get("aspects_detail", {})
-    for a in chart.aspects:
-        key = f"{a.planet1} {a.aspect} {a.planet2}"
-        detail = aspects_detail.get(key, {})
-        a.type = detail.get("type")
-        interp_text = detail.get("interpretation") or aspects.get(key)
-        a.interpretation = interp_text
-        a.source = "database" if key in interp.get("aspects", {}) else ("default" if key in aspects else None)
-        a.is_placeholder = is_placeholder_text(interp_text) if interp_text else False
-
-    bt = interp.get("big_three", {})
-    def _bt_sun():
-        d = bt.get("sun")
-        if not d:
-            return None
-        interp_val = d.get("interpretation") or d.get("sign_interpretation")
-        return BigThreeSun(
-            **d,
-            source="database",
-            is_placeholder=is_placeholder_text(interp_val),
-        )
-    def _bt_moon():
-        d = bt.get("moon")
-        if not d:
-            return None
-        return BigThreeMoon(
-            **d,
-            source="database",
-            is_placeholder=is_placeholder_text(d.get("interpretation")),
-        )
-    def _bt_asc():
-        d = bt.get("ascendant")
-        if not d:
-            return None
-        return BigThreeAscendant(
-            **d,
-            source="database",
-            is_placeholder=is_placeholder_text(d.get("interpretation")),
-        )
-    big_three = BigThree(sun=_bt_sun(), moon=_bt_moon(), ascendant=_bt_asc())
-    house_dicts = {h.number: h for h in chart.houses}
-    planets_by_house: dict[int, list[str]] = {}
-    for p in chart.planets:
-        planets_by_house.setdefault(p.house, []).append(p.name)
-    per_house: list[PerHouseInfo] = []
-    for num in range(1, 13):
-        h = house_dicts.get(num)
-        sign_on_cusp = h.sign if h else ""
-        planets = planets_by_house.get(num, [])
-        planet_interpretations = {k: v for k, v in planet_in_house.items() if f" in House {num}" in k and any(p in k for p in planets)}
-        sign_interp = None
-        if h and sign_on_cusp:
-            sign_interp = interp.get("house_sign_interpretations", {}).get((num, sign_on_cusp))
-        if sign_interp is None and num == 1:
-            sign_interp = interp.get("rising_sign_interpretation")
-        per_house.append(PerHouseInfo(
-            house=num,
-            sign_on_cusp=sign_on_cusp,
-            planets=planets,
-            planet_interpretations=planet_interpretations,
-            sign_interpretation=sign_interp,
-        ))
-    dist = interp.get("chart_shape", {}).get("distribution", {})
-    quadrant_keys = [k for k in dist if "quadrant" in k]
-    hemisphere_keys = [k for k in dist if "hemisphere" in k and "spread" not in k]
-    house_interpretation = HouseInterpretation(
-        per_house=per_house,
-        shape=ChartShapeInfo(
-            primary=interp.get("chart_shape", {}).get("primary"),
-            interpretation=interp.get("chart_shape", {}).get("interpretation"),
-            distribution=dist,
-        ),
-        quadrant={k: dist[k] for k in quadrant_keys},
-        hemisphere={k: dist[k] for k in hemisphere_keys},
-    )
-
-    chart.interpretations = ChartInterpretations(
-        planet_in_sign=planet_in_sign,
-        big_three=big_three,
-        house_interpretation=house_interpretation,
-        rising_sign_interpretation=interp.get("rising_sign_interpretation"),
-        chart_shape=ChartShapeInfo(
-            primary=interp.get("chart_shape", {}).get("primary"),
-            interpretation=interp.get("chart_shape", {}).get("interpretation"),
-            distribution=interp.get("chart_shape", {}).get("distribution", {}),
-        ),
-        modality_element_distribution=interp.get("modality_element_distribution", {}),
-        retrograde_planets=interp.get("retrograde_planets", []),
-        retrograde_interpretations=interp.get("retrograde_interpretations", {}),
-        sources=sources,
-        placeholder_keys=placeholder_keys,
-    )
-    try:
-        planet_kw, house_kw, sign_adv, asp_norm = await fetch_chart_lexicon_data(session)
-    except Exception:
-        planet_kw, house_kw = {}, {}
-        sign_adv = dict(DEFAULT_SIGN_ADVERBS)
-        asp_norm = dict(DEFAULT_ASPECT_KEYPHRASES_NORM)
-    cs = interp.get("chart_shape", {}) or {}
-    chart.interpretations_summary = build_interpretations_summary(
-        planets=chart.planets,
-        houses=chart.houses,
-        aspects=chart.aspects,
-        planet_in_sign=planet_in_sign,
-        planet_in_house=planet_in_house,
-        planet_keywords=planet_kw,
-        house_keywords=house_kw,
-        sign_adverbs=sign_adv,
-        aspect_keyphrase_by_norm=asp_norm,
-        chart_shape_primary=cs.get("primary"),
-        chart_shape_interpretation=cs.get("interpretation"),
-        distribution=cs.get("distribution") or {},
-        modality_element_distribution=interp.get("modality_element_distribution") or {},
-        big_three_dict=big_three.model_dump(),
-    )
-    return chart
-
-
-async def _save_reading(chart: NatalChart, session: AsyncSession) -> None:
+async def _save_reading(chart: ChartAPIResponse, session: AsyncSession) -> None:
     """Save chart to readings table. Upserts by identifier."""
     identifier = _make_reading_identifier(
         chart.name or "Subject",
@@ -810,7 +247,7 @@ async def get_locations(
     return await _search_locations(q, limit)
 
 
-@app.get("/chart", response_model=NatalChart, summary="Generate a natal chart")
+@app.get("/chart", response_model=ChartAPIResponse, summary="Generate a natal chart")
 async def get_chart(
     year: int = Query(..., examples=[1990], description="Birth year"),
     month: int = Query(..., ge=1, le=12, examples=[6], description="Birth month"),
@@ -849,13 +286,13 @@ async def get_chart(
     if (parsed := _parse_time(time)):
         hour, minute = parsed
     try:
-        chart = build_chart(
+        core = build_chart_core(
             year, month, day, hour, minute,
             city=city, nation=nation, lat=lat, lng=lng, tz_str=tz_str,
             name=name or "",
             house_system=house_system,
         )
-        chart = await _enrich_with_interpretations(chart, session)
+        chart = await build_chart_api_response(core, session)
         chart.reading_id = _make_reading_identifier(
             chart.name or "Subject", chart.birth_datetime, chart.latitude, chart.longitude
         )
@@ -884,7 +321,7 @@ class ChartRequest(BaseModel):
     house_system: str = Field(DEFAULT_HOUSE_SYSTEM, description="whole_sign or placidus")
 
 
-@app.post("/chart", response_model=NatalChart, summary="Generate a natal chart (POST)")
+@app.post("/chart", response_model=ChartAPIResponse, summary="Generate a natal chart (POST)")
 async def create_chart(
     req: ChartRequest,
     session: AsyncSession = Depends(get_db),
@@ -899,14 +336,14 @@ async def create_chart(
         hour, minute = req.hour, req.minute
         if (parsed := _parse_time(req.time)):
             hour, minute = parsed
-        chart = build_chart(
+        core = build_chart_core(
             req.year, req.month, req.day, hour, minute,
             city=req.city, nation=req.nation,
             lat=req.lat, lng=req.lng, tz_str=req.tz_str,
             name=req.name or "",
             house_system=req.house_system,
         )
-        chart = await _enrich_with_interpretations(chart, session)
+        chart = await build_chart_api_response(core, session)
         chart.reading_id = _make_reading_identifier(
             chart.name or "Subject", chart.birth_datetime, chart.latitude, chart.longitude
         )
@@ -929,11 +366,11 @@ async def list_readings(session: AsyncSession = Depends(get_db)):
     rows = (await session.execute(select(Reading).order_by(Reading.created_at.desc()))).scalars().all()
     result = []
     for r in rows:
-        chart = NatalChart.model_validate_json(r.chart_data)
+        chart = ChartAPIResponse.model_validate_json(r.chart_data)
         result.append(
             ReadingSummary(
                 identifier=r.identifier,
-                name=chart.name,
+                name=chart.name or None,
                 birth_datetime=chart.birth_datetime,
                 created_at=r.created_at.isoformat() if r.created_at else None,
             )
@@ -941,7 +378,7 @@ async def list_readings(session: AsyncSession = Depends(get_db)):
     return result
 
 
-@app.get("/readings/{identifier}", response_model=NatalChart, summary="Fetch a saved reading")
+@app.get("/readings/{identifier}", response_model=ChartAPIResponse, summary="Fetch a saved reading")
 async def get_reading(
     identifier: str = Path(..., description="Reading ID: name__birthdatetime__lat__lng"),
     session: AsyncSession = Depends(get_db),
@@ -952,7 +389,7 @@ async def get_reading(
     ).scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="Reading not found")
-    chart = NatalChart.model_validate_json(row.chart_data)
+    chart = ChartAPIResponse.model_validate_json(row.chart_data)
     chart.reading_id = identifier
     return chart
 

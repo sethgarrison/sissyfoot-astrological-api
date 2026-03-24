@@ -1,5 +1,5 @@
 """
-Test interpretation data structure, sources, and placeholder metadata.
+Test chart API wire shape: chart_data (drawing) + interpretation (readings).
 Run: pytest tests/test_interpretations.py -v
 Requires: database seeded (python -m database.seed, python -m database.seed_from_csv)
 """
@@ -10,7 +10,6 @@ from main import app
 from interpretations.data_quality import is_placeholder_text
 
 
-# Birth data that produces a known chart (NYC, fixed for reproducibility)
 CHART_PARAMS = {
     "year": 1990,
     "month": 6,
@@ -24,8 +23,8 @@ CHART_PARAMS = {
 
 
 @pytest.mark.asyncio
-async def test_chart_returns_interpretation_structure():
-    """Chart response includes all expected interpretation fields."""
+async def test_chart_top_level_and_chart_data():
+    """Response has chart_data for drawing (aspects, planets, distributions, lunar_phase)."""
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
@@ -34,20 +33,36 @@ async def test_chart_returns_interpretation_structure():
         assert r.status_code == 200
         data = r.json()
 
-    interp = data.get("interpretations", {})
-    assert "planet_in_sign" in interp
-    assert "big_three" in interp
-    assert "house_interpretation" in interp
-    assert "rising_sign_interpretation" in interp
-    assert "chart_shape" in interp
-    assert "modality_element_distribution" in interp
-    assert "retrograde_planets" in interp
-    assert "retrograde_interpretations" in interp
+    assert "chart_data" in data
+    assert "interpretation" in data
+    assert "interpretations" not in data
+    assert "interpretations_summary" not in data
+
+    cd = data["chart_data"]
+    for key in (
+        "aspects",
+        "planets",
+        "lunar_nodes",
+        "houses",
+        "by_quality",
+        "by_element",
+        "lunar_phase",
+    ):
+        assert key in cd
+
+    bq = cd["by_quality"]
+    for q in ("cardinal", "fixed", "mutable"):
+        assert q in bq
+        assert "count" in bq[q] and "signs" in bq[q] and "planets" in bq[q]
+
+    be = cd["by_element"]
+    for e in ("fire", "earth", "air", "water"):
+        assert e in be
 
 
 @pytest.mark.asyncio
-async def test_interpretations_summary_structure():
-    """interpretations_summary: house_groups, chart_context, big_three."""
+async def test_interpretation_structure():
+    """interpretation: big_three, context, house_groups, retrograde fields."""
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
@@ -56,27 +71,51 @@ async def test_interpretations_summary_structure():
         assert r.status_code == 200
         data = r.json()
 
-    summary = data.get("interpretations_summary", {})
-    assert "house_groups" in summary
-    assert "chart_context" in summary
-    assert "big_three" in summary
+    interp = data["interpretation"]
+    assert "big_three" in interp
+    assert "context" in interp
+    assert "house_groups" in interp
+    assert "retrograde_planets" in interp
+    assert "retrograde_interpretations" in interp
 
-    ctx = summary["chart_context"]
+    ctx = interp["context"]
     assert "shape" in ctx
-    assert "concentration" in ctx
-    assert "modality_element" in ctx
-    assert "key" in ctx["shape"] or ctx["shape"].get("key") is None
+    assert "spatial_distribution" in ctx
+    assert "quality_distribution" in ctx
+    assert "modality_distribution" in ctx
 
-    for hg in summary["house_groups"]:
+    bt = interp["big_three"]
+    for lum in ("sun", "moon", "ascendant"):
+        assert lum in bt
+        assert "sign" in bt[lum]
+
+
+@pytest.mark.asyncio
+async def test_house_groups_and_placements():
+    """house_groups: house, sign_on_cusp, interpretation.house_in_sign, planets with aspects."""
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        r = await client.get("/chart", params=CHART_PARAMS)
+        assert r.status_code == 200
+        data = r.json()
+
+    groups = data["interpretation"]["house_groups"]
+    assert len(groups) >= 1
+    for hg in groups:
         assert "house" in hg
         assert "house_keyword" in hg
         assert "sign_on_cusp" in hg
-        assert "placements" in hg
-        for pl in hg["placements"]:
+        assert "interpretation" in hg
+        assert "house_in_sign" in hg["interpretation"]
+        assert "planets" in hg
+        for pl in hg["planets"]:
             assert "body" in pl
             assert "sign" in pl
-            assert "sign_adverb" in pl
-            assert "synthesis" in pl
+            assert "interpretation" in pl
+            assert "planet_in_sign" in pl["interpretation"]
+            assert "planet_in_house" in pl["interpretation"]
             assert "aspects" in pl
             for asp in pl["aspects"]:
                 assert "aspect" in asp
@@ -85,8 +124,8 @@ async def test_interpretations_summary_structure():
 
 
 @pytest.mark.asyncio
-async def test_interpretations_have_source_and_placeholder_metadata():
-    """Client can identify data source and placeholders via sources and placeholder_keys."""
+async def test_aspects_in_chart_data_have_drawing_metadata():
+    """Aspect rows live under chart_data; include type, interpretation, source, is_placeholder."""
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
@@ -95,93 +134,15 @@ async def test_interpretations_have_source_and_placeholder_metadata():
         assert r.status_code == 200
         data = r.json()
 
-    interp = data.get("interpretations", {})
-    assert "sources" in interp, "sources required for client to identify data provenance"
-    assert "placeholder_keys" in interp, "placeholder_keys required to flag fill-in gaps"
-
-    sources = interp.get("sources", {})
-    placeholder_keys = interp.get("placeholder_keys", [])
-
-    # Every planet_in_sign key should have a source (aspects: chart.aspects[].source, planet_in_house: per_house)
-    for key in list(interp.get("planet_in_sign", {}).keys()):
-        assert key in sources, f"planet_in_sign key {key} should have sources entry"
-        assert sources[key] in ("database", "default")
-
-    # Placeholder keys: planet_in_sign only (aspects use chart.aspects[].is_placeholder)
-    for key in placeholder_keys:
-        val = interp.get("planet_in_sign", {}).get(key)
-        if val:
-            assert is_placeholder_text(val), f"placeholder_keys[{key}] should match placeholder pattern"
-
-
-@pytest.mark.asyncio
-async def test_big_three_structure_and_metadata():
-    """Big Three has correct shape; when present, includes source and is_placeholder."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test",
-    ) as client:
-        r = await client.get("/chart", params=CHART_PARAMS)
-        assert r.status_code == 200
-        data = r.json()
-
-    bt = data.get("interpretations", {}).get("big_three", {})
-    # Structure: sun, moon, ascendant (each optional)
-    for lum in ("sun", "moon", "ascendant"):
-        if bt.get(lum):
-            obj = bt[lum]
-            assert "sign" in obj
-            assert "source" in obj, f"big_three.{lum} should have source for client"
-            assert "is_placeholder" in obj, f"big_three.{lum} should have is_placeholder"
-            if obj.get("source"):
-                assert obj["source"] == "database"
-
-
-@pytest.mark.asyncio
-async def test_aspects_have_type_and_interpretation_metadata():
-    """Each aspect in chart has type, interpretation, source, is_placeholder."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test",
-    ) as client:
-        r = await client.get("/chart", params=CHART_PARAMS)
-        assert r.status_code == 200
-        data = r.json()
-
-    aspects = data.get("aspects", [])
+    aspects = data["chart_data"]["aspects"]
+    assert isinstance(aspects, list)
+    assert len(aspects) > 0
     for a in aspects:
         assert "planet1" in a and "planet2" in a and "aspect" in a
-        assert "type" in a, "aspect should have type (conjunction/stressful/easy-flowing)"
+        assert "type" in a
         assert "interpretation" in a or a.get("interpretation") is None
-        assert "source" in a, "aspect should have source for client"
-        assert "is_placeholder" in a, "aspect should have is_placeholder"
-
-
-@pytest.mark.asyncio
-async def test_house_interpretation_structure():
-    """house_interpretation has per_house, shape, quadrant, hemisphere."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test",
-    ) as client:
-        r = await client.get("/chart", params=CHART_PARAMS)
-        assert r.status_code == 200
-        data = r.json()
-
-    hi = data.get("interpretations", {}).get("house_interpretation", {})
-    assert "per_house" in hi
-    assert "shape" in hi
-    assert "quadrant" in hi
-    assert "hemisphere" in hi
-
-    per_house = hi.get("per_house", [])
-    assert len(per_house) == 12
-    for ph in per_house:
-        assert "house" in ph
-        assert "sign_on_cusp" in ph
-        assert "planets" in ph
-        assert "planet_interpretations" in ph
-        assert "sign_interpretation" in ph
+        assert "source" in a
+        assert "is_placeholder" in a
 
 
 def test_is_placeholder_text_detects_known_patterns():

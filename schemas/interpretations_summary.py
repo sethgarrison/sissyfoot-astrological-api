@@ -1,4 +1,4 @@
-"""Pydantic models for interpretations_summary on NatalChart."""
+"""Pydantic models for the internal interpretations summary (fed into chart_pipeline house_groups)."""
 
 from __future__ import annotations
 

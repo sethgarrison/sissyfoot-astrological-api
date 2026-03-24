@@ -115,7 +115,9 @@ export GEONAMES_USERNAME=your_username
 
 ### Interpretations database
 
-The chart response includes an `interpretations` object with planet-in-sign, planet-in-house, aspect, chart shape, and distribution text loaded from the database.
+The chart response splits **`chart_data`** (positions, houses, aspects, distributions, lunar phase — for drawing only) from **`interpretation`** (big three, chart context, house-grouped readings, retrogrades). Interpretation copy is loaded from the database. **Client rendering guide:** [docs/client-interpretations-summary.md](docs/client-interpretations-summary.md).
+
+Saved readings store the same JSON shape as `GET /chart` / `POST /chart` (`ChartAPIResponse`). Older rows saved in the previous `NatalChart` format will not validate until re-generated.
 
 - **Local:** Without `DATABASE_URL`, the app uses SQLite (`natal_chart.db`) in the project directory.
 

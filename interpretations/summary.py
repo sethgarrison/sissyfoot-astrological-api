@@ -1,4 +1,4 @@
-"""Build interpretations_summary (house-grouped short synthesis + aspects) for NatalChart."""
+"""Build internal house-grouped synthesis + aspects (consumed by chart_pipeline, not the wire JSON)."""
 
 from __future__ import annotations
 
