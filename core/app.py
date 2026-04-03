@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 from astrology.routers import chart_router, data_router
 from core.db import init_db
-from tarot.routers import cards_router
+from tarot.routers import api_router as tarot_api_router
 
 CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
@@ -31,7 +31,7 @@ def create_app() -> FastAPI:
 
     app.include_router(chart_router)
     app.include_router(data_router)
-    app.include_router(cards_router)
+    app.include_router(tarot_api_router)
 
     app.add_middleware(
         CORSMiddleware,

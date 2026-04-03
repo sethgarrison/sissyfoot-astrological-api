@@ -1,3 +1,3 @@
-from tarot.routers.cards import router as cards_router
+from tarot.routers.api import router as api_router
 
-__all__ = ["cards_router"]
+__all__ = ["api_router"]

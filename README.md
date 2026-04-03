@@ -47,6 +47,10 @@ Returns planetary positions, house cusps, aspects, lunar phase, the big three (s
 | GET    | `/debug/interpretations` | Debug: interpretation table row counts |
 | GET    | `/docs`            | Interactive Swagger UI              |
 
+### Tarot API (`/api/...`)
+
+Public JSON routes (e.g. `GET /api/cards`, tutorials, search) and admin routes under `/api/admin/cards` require `Authorization: Bearer <ADMIN_API_KEY>` when `ADMIN_API_KEY` is set. Details and shapes: [TAROT_API_SERVER_SPEC.md](TAROT_API_SERVER_SPEC.md). On deploy, `init_db` creates `cards` and `tutorials` tables when missing; load rows from your migrated Postgres data.
+
 ### Query parameters / body fields
 
 You can provide location two ways:
