@@ -1,7 +1,7 @@
 """
 Test chart API wire shape: chart_data (drawing) + interpretation (readings).
 Run: pytest astrology/tests/test_interpretations.py -v
-Requires: database seeded (python -m astrology.scripts.seed, python -m astrology.scripts.seed_from_csv)
+Requires: interpretations present in the database (populated server or local DB).
 """
 import pytest
 from httpx import ASGITransport, AsyncClient

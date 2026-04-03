@@ -1,4 +1,3 @@
-# Exclude from Docker build - data/ is NOT excluded (required for seed_from_csv)
 .venv
 __pycache__
 .git

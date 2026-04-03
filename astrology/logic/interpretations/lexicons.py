@@ -7,7 +7,7 @@ via fetch_chart_lexicon_data in interpretations.lookup.
 
 from __future__ import annotations
 
-# Shipped defaults (also written by seed_from_csv when DB cells are empty)
+# Shipped defaults; runtime merges with DB rows (API or SQL).
 DEFAULT_SIGN_ADVERBS: dict[str, str] = {
     "Aries": "urgently",
     "Taurus": "realistically",

@@ -352,7 +352,7 @@ async def get_reading(
 async def debug_interpretations(session: AsyncSession = Depends(get_db)):
     """
     Returns row counts for all interpretation tables and a sample lookup check.
-    Use to verify seed data is present and lookups would hit DB vs defaults.
+    Use to verify interpretation tables are populated and lookups hit the DB vs defaults.
     """
     async def count(model):
         r = await session.execute(select(func.count()).select_from(model))
@@ -407,16 +407,16 @@ async def debug_interpretations(session: AsyncSession = Depends(get_db)):
     interp = counts["interpretations"]
     gaps = []
     if interp.get("sun_in_signs", 0) == 0:
-        gaps.append("Big Three (sun): sun.csv not loaded into signs or seed_from_csv failed")
+        gaps.append("Big Three (sun): sun data not loaded into signs table")
     if interp["moon_sign_big_three"] == 0:
-        gaps.append("Big Three (moon): moon.csv not loaded or seed_from_csv failed")
+        gaps.append("Big Three (moon): moon sign interpretations missing or empty")
     if interp["ascendant_sign_big_three"] == 0:
-        gaps.append("Big Three (ascendant): ascendent.csv not loaded or seed_from_csv failed")
+        gaps.append("Big Three (ascendant): ascendant sign interpretations missing or empty")
     if interp["sign_house"] == 0:
-        gaps.append("Sign-house: sign_house_interpretations.csv not loaded")
+        gaps.append("Sign-house: no rows in sign_house_interpretations")
     if interp["planet_aspect"] == 0:
-        gaps.append("Planet-aspect: aspect_interpretations.csv has no planet-pair rows")
+        gaps.append("Planet-aspect: no planet-pair rows in planet_aspect_interpretations")
     if placeholder_count > 0:
-        gaps.append(f"planet_sign: {placeholder_count} rows still placeholders (Sun/Moon/Chiron missing from planet_sign_interpretations.csv)")
+        gaps.append(f"planet_sign: {placeholder_count} rows still placeholders (e.g. Sun/Moon/Chiron missing in planet_sign_interpretations)")
 
     return {"counts": counts, "sample_checks": sample_checks, "likely_gaps": gaps}

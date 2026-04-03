@@ -17,7 +17,7 @@
 
 1. **Backup** (local SQLite): `cp natal_chart.db natal_chart.db.backup`
 2. **Backup** (PostgreSQL): Use your host’s backup tools or `pg_dump` before large changes.
-3. Use `data/models_report.md` for table/column reference.
+3. Use `GET /data/*` in the API (or `\d table_name` in `psql` / `.schema` in SQLite) for table and column reference.
 
 ---
 
@@ -141,7 +141,7 @@ WHERE shape_key = 'bowl';
 ## Adding a new row (if missing)
 
 ```sql
--- Example: add Sun-in-Aries row (normally exists after seed)
+-- Example: add Sun-in-Aries row (normally already present)
 INSERT INTO sun_sign_interpretations (sign_id, interpretation, archetypes_balanced, archetypes_unbalanced, journey, gifts, challenges)
 SELECT id, 'Your text', NULL, NULL, NULL, NULL, NULL
 FROM signs WHERE name = 'Aries';

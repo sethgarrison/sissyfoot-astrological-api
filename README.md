@@ -121,41 +121,7 @@ Saved readings store the same JSON shape as `GET /chart` / `POST /chart` (`Chart
 
 - **Local:** Without `DATABASE_URL`, the app uses SQLite (`natal_chart.db`) in the project directory.
 
-- **Seeding:** For local dev or manual runs:
-
-  ```bash
-  python -m astrology.scripts.seed
-  python -m astrology.scripts.seed_from_csv
-  ```
-
-  `seed` creates reference tables and placeholder rows; `seed_from_csv` loads real interpretations from `data/new/*.csv`. Both are idempotent and preserve existing content.
-
-**The database is the source of truth.** Edit interpretations directly in the DB — no CSV bulk updates. See **[astrology/docs/EDITING_DATABASE.md](astrology/docs/EDITING_DATABASE.md)** for SQLite/PostgreSQL commands, lookup IDs, and example `UPDATE`/`INSERT` statements.
-
-**Sun merged into signs:** Sun-in-sign (Big Three) data lives in the `signs` table. The `sun_sign_interpretations` table is deprecated. For existing DBs that have it, run `python -m astrology.scripts.merge_sun_into_signs` once to copy data into signs, then `python -m astrology.scripts.drop_sun_sign_interpretations` to drop the old table.
-
-### Export interpretations to CSV
-
-Export interpretation tables to CSV for reference or backup (not for re-import):
-
-```bash
-# Activate your venv first, then:
-python -m astrology.scripts.export_interpretations
-```
-
-CSVs are written to the `data/` folder:
-
-| File | Contents |
-|------|----------|
-| `planets.csv`, `signs.csv`, `houses.csv`, `aspects.csv` | Reference data |
-| `planet_sign_interpretations.csv` | Planet + sign + interpretation_text + retrograde_interpretation |
-| `planet_house_interpretations.csv` | Planet + house + interpretation_text + retrograde_interpretation |
-| `aspect_interpretations.csv` | Aspect + interpretation_text |
-| `chart_shape_interpretations.csv` | shape_key + interpretation_text |
-| `chart_distribution_interpretations.csv` | distribution_key + interpretation_text |
-| `modality_element_distribution_interpretations.csv` | distribution_key + interpretation_text |
-
-**Note:** Seed the database first (`python -m astrology.scripts.seed`) so the export has data to write. There is currently no import script — after editing CSVs, update the database manually or via a migration.
+**The database is the source of truth.** Interpretations are maintained on the server (or in your local DB). Use the **`/data/*`** GET and PATCH endpoints for structured edits, or **[astrology/docs/EDITING_DATABASE.md](astrology/docs/EDITING_DATABASE.md)** for direct SQL. Sun-in-sign (Big Three) fields live on the `signs` table.
 
 ## Deploy to Render (free)
 
